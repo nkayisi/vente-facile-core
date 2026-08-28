@@ -194,3 +194,54 @@ export function remainingChannels(
 
   return { sealed: remainingSealed, loose };
 }
+
+export interface StockCounters {
+  /** Quantité en rayon, en unité de détail. */
+  quantity: number;
+  reserved_quantity?: number | null;
+  /** Contenants encore scellés, tels qu'ENREGISTRÉS. */
+  package_quantity?: number | null;
+  /** Unités hors emballage, telles qu'ENREGISTRÉES. */
+  loose_quantity?: number | null;
+}
+
+/**
+ * Partage la quantité DISPONIBLE (hors réservations) en scellé et vrac.
+ *
+ * Miroir strict de `PackagingService.available_split`. Le mobile lit les
+ * compteurs bruts du tirage ; le serveur, lui, expose un disponible déjà
+ * ventilé. Sans ce miroir, l'application afficherait le stock RÉSERVÉ comme
+ * vendable et le POS accepterait une vente que le serveur refuse.
+ *
+ * Une réservation ne porte pas sur des contenants précis : on l'impute donc
+ * d'abord au scellé. L'approximation est volontairement conservatrice, elle
+ * peut refuser une vente en gros de justesse, jamais en autoriser une qui
+ * viderait un contenant déjà promis à un devis.
+ */
+export function availableSplit(
+  stock: StockCounters,
+  factor: number | null
+): { packages: number; loose: number } {
+  const reserved = Math.max(0, stock.reserved_quantity ?? 0);
+  const availableBase = stock.quantity - reserved;
+
+  if (!factor || factor < 2) return { packages: 0, loose: availableBase };
+
+  // Sans réservation, les compteurs se lisent TELS QUELS : c'est de loin le cas
+  // le plus fréquent, et le seul où la réponse est exacte. Les redécouper
+  // transformerait « 3 casiers + 27 bouteilles » en « 4 casiers + 3 bouteilles »,
+  // c'est-à-dire une situation de rayon en une autre.
+  if (reserved <= 0) {
+    return { packages: stock.package_quantity ?? 0, loose: stock.loose_quantity ?? 0 };
+  }
+
+  // Avec réservation, on reconstitue un partage sur le disponible en préservant
+  // le vrac : le déficit est donc porté par le scellé.
+  const availableLoose = Math.min(stock.loose_quantity ?? 0, Math.max(availableBase, 0));
+  return splitPackaged(availableBase, availableLoose, factor);
+}
+
+/** Quantité disponible, réservations déduites. */
+export function availableBase(stock: StockCounters): number {
+  return stock.quantity - Math.max(0, stock.reserved_quantity ?? 0);
+}

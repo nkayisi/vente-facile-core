@@ -15,7 +15,7 @@ import {
   splitPackaged,
   toBaseQuantity,
   type Packaging,
-} from "../src/packaging";
+  availableSplit,} from "../src/packaging";
 
 const casier: Packaging = {
   factor: 12,
@@ -148,5 +148,41 @@ describe("remainingChannels", () => {
       sealed: 3,
       loose: 9,
     });
+  });
+});
+
+describe("Disponible ventilé", () => {
+  const casier = { quantity: 39, package_quantity: 3, loose_quantity: 3 };
+
+  it("lit les compteurs tels quels quand rien n'est réservé", () => {
+    // Redécouper 39 au facteur donnerait « 3 casiers + 3 bouteilles » ici par
+    // coïncidence, mais « 3 casiers + 27 bouteilles » deviendrait « 5 casiers +
+    // 3 bouteilles » : une situation de rayon changée en une autre.
+    expect(availableSplit({ quantity: 63, package_quantity: 3, loose_quantity: 27 }, 12))
+      .toEqual({ packages: 3, loose: 27 });
+    expect(availableSplit(casier, 12)).toEqual({ packages: 3, loose: 3 });
+  });
+
+  it("impute les réservations au scellé, jamais au vrac", () => {
+    // 12 unités réservées sur 39 : il reste 27 disponibles. Le vrac (3) est
+    // préservé, le déficit est porté par les casiers.
+    expect(availableSplit({ ...casier, reserved_quantity: 12 }, 12))
+      .toEqual({ packages: 2, loose: 3 });
+  });
+
+  it("ne promet aucun contenant quand tout est réservé", () => {
+    expect(availableSplit({ ...casier, reserved_quantity: 39 }, 12))
+      .toEqual({ packages: 0, loose: 0 });
+  });
+
+  it("met tout au vrac pour un produit sans conditionnement", () => {
+    expect(availableSplit({ quantity: 10, reserved_quantity: 4 }, null))
+      .toEqual({ packages: 0, loose: 6 });
+  });
+
+  it("porte un découvert par le vrac, jamais par des contenants négatifs", () => {
+    // Un entrepôt tolérant le découvert : « -2 casiers » n'a aucun sens à l'écran.
+    expect(availableSplit({ quantity: -5, loose_quantity: 0, reserved_quantity: 1 }, 12))
+      .toEqual({ packages: 0, loose: -6 });
   });
 });
