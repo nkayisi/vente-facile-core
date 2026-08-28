@@ -1,6 +1,6 @@
 {
   "name": "@vente-facile/core",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Regles metier partagees entre le back-office web et l'application mobile Vente Facile.",
   "license": "UNLICENSED",
   "private": false,
