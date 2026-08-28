@@ -22,3 +22,5 @@ export * from "./permissions";
 export * from "./due-date";
 
 export * as receipt from "./receipt/index";
+
+export * as pos from "./pos/index";
