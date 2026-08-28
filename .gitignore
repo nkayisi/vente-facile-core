@@ -2,3 +2,6 @@ node_modules/
 dist/
 *.tsbuildinfo
 .DS_Store
+
+# Tarball produit par `pnpm pack` pour les installations locales.
+*.tgz
