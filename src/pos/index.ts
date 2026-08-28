@@ -9,3 +9,4 @@ export * from "./basket";
 export * from "./loyalty";
 export * from "./credit";
 export * from "./payload";
+export * from "./stock";

@@ -26,7 +26,8 @@ export interface SaleTender {
 }
 
 export interface SalePayloadInput {
-  lines: (BasketLine & { productId: string })[];
+  /** Chaque produit doit porter son `id` : c'est ce que le serveur reçoit. */
+  lines: (BasketLine & { product: { id: string } })[];
   currencies: CurrencyTable;
   invoiceCurrency: string;
   changeCurrency?: string | null;
@@ -95,7 +96,7 @@ export function buildSalePayload(input: SalePayloadInput): SalePayload {
 
   const items: SaleItemPayload[] = lines.map((line) => {
     const base: SaleItemPayload = {
-      product: line.productId,
+      product: line.product.id,
       unit_price: currencies.convertMoney(line.unit_price, primary, cur),
       discount_percentage: r2(line.discount_percentage),
     };

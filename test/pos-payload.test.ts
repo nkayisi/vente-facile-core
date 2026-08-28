@@ -17,8 +17,7 @@ const table = createCurrencyTable(
 );
 
 const detail = {
-  productId: "p1",
-  product: { selling_mode: "retail_only" },
+  product: { id: "p1", selling_mode: "retail_only" },
   quantity: 3,
   packageQuantity: 0,
   unit_price: 5000,
@@ -26,8 +25,8 @@ const detail = {
 };
 
 const gros = {
-  productId: "p2",
   product: {
+    id: "p2",
     selling_mode: "wholesale_and_retail",
     units_per_package: 12,
     wholesale_price: "50000",

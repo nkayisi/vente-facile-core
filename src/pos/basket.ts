@@ -21,6 +21,12 @@ import { getPackaging, type PackagedProductLike } from "../packaging";
 import { r2, type CurrencyTable } from "./money";
 
 export interface BasketProduct extends PackagedProductLike {
+  /**
+   * Identifiant du produit. Facultatif pour totaliser, indispensable dès qu'il
+   * faut retrouver la ligne d'un produit dans le panier (contrôle de stock) ou
+   * la nommer au serveur (corps de la vente).
+   */
+  id?: string;
   wholesale_price?: string | number | null;
   is_taxable?: boolean | null;
   tax_rate?: string | number | null;
