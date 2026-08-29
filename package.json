@@ -1,6 +1,6 @@
 {
   "name": "@vente-facile/core",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Regles metier partagees entre le back-office web et l'application mobile Vente Facile.",
   "license": "UNLICENSED",
   "private": false,
@@ -28,17 +28,14 @@
   },
   "files": [
     "dist",
-    "src",
-    "tsup.config.ts",
-    "tsconfig.json"
+    "src"
   ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "prepare": "tsup"
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "tsup": "^8.5.0",

@@ -1,6 +1,13 @@
 node_modules/
-dist/
 *.tsbuildinfo
+
+# `dist/` est VERSIONNE, volontairement. Ce paquet est consomme par URL
+# git, pas depuis un registre npm : il doit donc voyager deja construit.
+# Le construire chez le consommateur est impossible en pratique, pnpm
+# lancant pour cela un `pnpm install` imbrique qui repart sur le projet
+# racine et boucle jusqu'a l'epuisement memoire.
+# Consequence : toute modification de `src/` exige `pnpm build` puis le
+# commit du `dist/` regenere.
 .DS_Store
 
 # Tarball produit par `pnpm pack` pour les installations locales.
