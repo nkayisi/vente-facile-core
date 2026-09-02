@@ -1,179 +1,4 @@
-/**
- * Jetons de mise en page du ticket thermique.
- *
- * Tout est en millimètres, unité native du PDF produit. L'ancien générateur
- * semait des `y += 0.5`, `y += 1`, `y += 1.5` sans échelle : le rythme vertical
- * était illisible et impossible à corriger sans tout remesurer. Ici, une seule
- * échelle d'espacement et trois épaisseurs de filet porteuses de sens.
- */
-type PaperWidth = 58 | 80;
-/**
- * Rôles typographiques. Le ticket précédent écrivait presque tout en 9 pt, d'où
- * l'absence de hiérarchie : le client ne savait pas où poser l'œil.
- */
-type FontRole = "orgName" | "band" | "total" | "chip" | "body" | "label" | "legal";
-interface FontSpec {
-    size: number;
-    bold: boolean;
-}
-declare const FONTS: Record<FontRole, FontSpec>;
-type SpaceSize = "xs" | "sm" | "md" | "lg";
-type RuleWeight = "heavy" | "light" | "hair";
-interface Tokens {
-    paperWidth: number;
-    margin: number;
-    /** Largeur réellement écrivable, filets compris. */
-    contentWidth: number;
-    /** Blanc de tête : confort de découpe sur imprimante thermique. */
-    topPadding: number;
-    /** Blanc de pied : l'avance papier ne doit pas rogner la dernière ligne. */
-    bottomPadding: number;
-    space: Record<SpaceSize, number>;
-    rule: Record<RuleWeight, number>;
-    /** Blanc minimal entre un libellé et son montant sur une ligne justifiée. */
-    minGap: number;
-    /** Retrait des lignes secondaires (conditionnement, remise de ligne). */
-    indent: number;
-    /** Hauteur maximale du logo. */
-    logoMaxHeight: number;
-    /** Bornes horizontales des colonnes du tableau d'articles, en fraction. */
-    itemCols: {
-        name: number;
-        qty: number;
-        unitPrice: number;
-    };
-}
-declare function tokensFor(paperWidth: PaperWidth): Tokens;
-/**
- * Interligne d'un corps donné.
- *
- * Le facteur 0,385 reproduit l'ancien couple (11 pt → 4,2 mm ; 9 pt → 3,5 mm)
- * pour que la densité du ticket reste celle que les marchands connaissent.
- */
-declare function leading(size: number): number;
-declare function leadingOf(role: FontRole): number;
-
-/**
- * Modèle déclaratif du ticket.
- *
- * Un document ne se dessine plus : il se décrit. C'est ce qui met fin à la
- * duplication structurelle de l'ancien générateur, où chaque document existait
- * en double (une fonction qui traçait, une fonction miroir qui rejouait les
- * mêmes conditions pour estimer la hauteur en millimètres). Il fallait corriger
- * deux fois, sinon le PDF finissait par une bande blanche ou tronquait sa
- * dernière ligne.
- *
- * Ici, `render-pdf.ts` parcourt cette liste UNE fois : il en tire à la fois la
- * hauteur et les primitives de tracé. Mesure et rendu ne peuvent plus diverger.
- */
-
-/** Ligne clé / valeur. */
-interface KvRow {
-    label: string;
-    value: string;
-    /** Met la valeur en gras : réservé à la ligne qui porte le sens du bloc. */
-    strong?: boolean;
-}
-/** Ligne de montant : la valeur est un montant déjà formaté. */
-interface AmountRow {
-    label: string;
-    value: string;
-    strong?: boolean;
-}
-interface ItemRow {
-    name: string;
-    /** Quantité brute, telle qu'elle tient dans la colonne. */
-    quantity: string;
-    unitPrice: string;
-    total: string;
-    /**
-     * Conditionnement lisible par le client : « 2 cartons + 3 bouteilles ».
-     * La colonne quantité est trop étroite pour le porter, il passe en dessous.
-     */
-    quantityLabel?: string;
-    /** Remise de ligne, en pourcentage. */
-    discountPercentage?: number;
-}
-type Block = 
-/**
- * Logo déjà chargé en dataURL, avec son rapport largeur / hauteur : la mise en
- * page se calcule avant tout tracé et ne peut donc pas interroger l'image.
- * Bloc simplement absent si le chargement a échoué.
- */
-{
-    kind: "logo";
-    dataUrl: string;
-    format: "PNG" | "JPEG";
-    aspectRatio: number;
-}
-/** Texte, replié sur la largeur utile. */
- | {
-    kind: "text";
-    text: string;
-    role: FontRole;
-    align?: "left" | "center";
-    italic?: boolean;
-    muted?: boolean;
-    indent?: boolean;
-}
-/**
- * Bandeau d'identification du document, en vidéo inversée.
- * Sur du papier thermique monochrome, c'est le seul dispositif qui se repère
- * dans une liasse sans avoir à lire.
- */
- | {
-    kind: "band";
-    text: string;
-    sub?: string;
-}
-/** Pastille inversée, plus courte que le bandeau : DUPLICATA, DETTE SOLDÉE. */
- | {
-    kind: "chip";
-    text: string;
-}
-/**
- * Bloc clé / valeur.
- * `inline` colle la valeur au libellé et replie en retrait : c'est le mode des
- * champs d'identité, où justifier à droite laissait 28 mm de vide entre
- * « Client: » et le nom sur un ticket de 53 mm.
- * `justified` pousse la valeur à droite : réservé aux colonnes de chiffres,
- * là où l'œil balaie verticalement.
- */
- | {
-    kind: "kv";
-    rows: KvRow[];
-    mode: "inline" | "justified";
-    role?: FontRole;
-}
-/** Tableau des articles, en-tête compris. */
- | {
-    kind: "items";
-    rows: ItemRow[];
-}
-/** Colonne de montants justifiés, mesurés avant tracé. */
- | {
-    kind: "amounts";
-    rows: AmountRow[];
-    role?: FontRole;
-}
-/** Le chiffre du document : libellé discret, montant en grand dessous. */
- | {
-    kind: "total";
-    label: string;
-    value: string;
-} | {
-    kind: "rule";
-    weight: RuleWeight;
-} | {
-    kind: "space";
-    size: SpaceSize;
-};
-/**
- * Retire les entrées absentes pour que les documents s'écrivent en une seule
- * expression, conditions comprises. Générique : sert autant aux blocs qu'aux
- * lignes clé / valeur.
- */
-declare function compact<T>(items: (T | null | false | undefined | "")[]): T[];
+import { R as ReceiptChrome, B as Block, A as AmountRow, F as FONTS, a as FontRole, b as FontSpec, I as ItemRow, K as KvRow, L as LoadedLogo, O as OrgIdentity, P as PaperWidth, c as RuleWeight, S as SpaceSize, T as Tokens, d as compact, f as footerBlocks, l as leading, e as leadingOf, o as orgHeaderBlocks, t as tokensFor } from './identity-ijBP1mCv.js';
 
 /**
  * Formatage monétaire du ticket.
@@ -226,54 +51,6 @@ declare function formatQuantity(quantity: number | string): string;
  * dans l'ancien fichier (« Recu » d'un côté, « Reçu par: » de l'autre).
  */
 declare function deaccent(text: string): string;
-
-/**
- * En-tête et pied communs à tous les documents imprimés.
- *
- * La base porte depuis toujours `logo`, `address`, `city`, `phone`, `rccm`,
- * `id_nat` et `tax_id` sur l'organisation : rien ne les imprimait. Les tickets
- * sortaient avec le seul nom de la boutique, sans même l'adresse, ce qui est un
- * problème d'identification autant que de conformité pour un commerçant en RDC.
- */
-
-interface OrgIdentity {
-    name: string;
-    address?: string;
-    city?: string;
-    country?: string;
-    phone?: string;
-    email?: string;
-    /** Registre du commerce. */
-    rccm?: string;
-    /** Identification nationale. */
-    idNat?: string;
-    /** Numéro impôt. */
-    taxId?: string;
-    logo?: LoadedLogo;
-}
-interface LoadedLogo {
-    dataUrl: string;
-    format: "PNG" | "JPEG";
-    aspectRatio: number;
-}
-interface ReceiptChrome {
-    org: OrgIdentity;
-    /**
-     * En-tête libre saisi par le marchand. Il COMPLÈTE désormais le bloc
-     * d'identité au lieu de le remplacer : l'ancien générateur écrasait nom,
-     * adresse et téléphone dès qu'un en-tête personnalisé existait, si bien qu'un
-     * marchand qui voulait ajouter un slogan perdait ses coordonnées.
-     */
-    header?: string;
-    footer?: string;
-}
-/** Blocs d'en-tête : logo, identité, coordonnées, mentions légales. */
-declare function orgHeaderBlocks(chrome: ReceiptChrome): Block[];
-/**
- * Blocs de pied. `defaultLines` sert quand le marchand n'a rien personnalisé :
- * chaque document propose sa propre formule de politesse.
- */
-declare function footerBlocks(chrome: ReceiptChrome, defaultLines: string[]): Block[];
 
 /**
  * Identification des documents.
@@ -491,9 +268,9 @@ declare function buildExpenseReceipt(data: ExpenseReceiptData): Block[];
  * littéralement le même document, ils n'en diffèrent que par le rendu.
  */
 
-type index_AmountRow = AmountRow;
+declare const index_AmountRow: typeof AmountRow;
 type index_BaseDocumentData = BaseDocumentData;
-type index_Block = Block;
+declare const index_Block: typeof Block;
 type index_CashSessionCurrencyLine = CashSessionCurrencyLine;
 type index_CashSessionReceiptData = CashSessionReceiptData;
 type index_CurrencyOverride = CurrencyOverride;
@@ -505,22 +282,22 @@ type index_DocumentIdentity = DocumentIdentity;
 type index_DocumentKind = DocumentKind;
 type index_ExpenseReceiptData = ExpenseReceiptData;
 declare const index_FONTS: typeof FONTS;
-type index_FontRole = FontRole;
-type index_FontSpec = FontSpec;
-type index_ItemRow = ItemRow;
-type index_KvRow = KvRow;
-type index_LoadedLogo = LoadedLogo;
+declare const index_FontRole: typeof FontRole;
+declare const index_FontSpec: typeof FontSpec;
+declare const index_ItemRow: typeof ItemRow;
+declare const index_KvRow: typeof KvRow;
+declare const index_LoadedLogo: typeof LoadedLogo;
 type index_LoyaltyData = LoyaltyData;
-type index_OrgIdentity = OrgIdentity;
-type index_PaperWidth = PaperWidth;
+declare const index_OrgIdentity: typeof OrgIdentity;
+declare const index_PaperWidth: typeof PaperWidth;
 type index_PaymentReceiptData = PaymentReceiptData;
-type index_ReceiptChrome = ReceiptChrome;
-type index_RuleWeight = RuleWeight;
+declare const index_ReceiptChrome: typeof ReceiptChrome;
+declare const index_RuleWeight: typeof RuleWeight;
 type index_SaleReceiptData = SaleReceiptData;
 type index_SaleReceiptItem = SaleReceiptItem;
 type index_SaleReceiptPayment = SaleReceiptPayment;
-type index_SpaceSize = SpaceSize;
-type index_Tokens = Tokens;
+declare const index_SpaceSize: typeof SpaceSize;
+declare const index_Tokens: typeof Tokens;
 declare const index_buildCashSessionReceipt: typeof buildCashSessionReceipt;
 declare const index_buildExpenseReceipt: typeof buildExpenseReceipt;
 declare const index_buildPaymentReceipt: typeof buildPaymentReceipt;
@@ -540,7 +317,7 @@ declare const index_orgHeaderBlocks: typeof orgHeaderBlocks;
 declare const index_symbolOf: typeof symbolOf;
 declare const index_tokensFor: typeof tokensFor;
 declare namespace index {
-  export { type index_AmountRow as AmountRow, type index_BaseDocumentData as BaseDocumentData, type index_Block as Block, type index_CashSessionCurrencyLine as CashSessionCurrencyLine, type index_CashSessionReceiptData as CashSessionReceiptData, type index_CurrencyOverride as CurrencyOverride, type index_CurrencyOverrides as CurrencyOverrides, index_DOCUMENT_IDENTITIES as DOCUMENT_IDENTITIES, index_DUPLICATE_CHIP as DUPLICATE_CHIP, type index_DebtData as DebtData, type index_DocumentIdentity as DocumentIdentity, type index_DocumentKind as DocumentKind, type index_ExpenseReceiptData as ExpenseReceiptData, index_FONTS as FONTS, type index_FontRole as FontRole, type index_FontSpec as FontSpec, type index_ItemRow as ItemRow, type index_KvRow as KvRow, type index_LoadedLogo as LoadedLogo, type index_LoyaltyData as LoyaltyData, type index_OrgIdentity as OrgIdentity, type index_PaperWidth as PaperWidth, type index_PaymentReceiptData as PaymentReceiptData, type index_ReceiptChrome as ReceiptChrome, type index_RuleWeight as RuleWeight, type index_SaleReceiptData as SaleReceiptData, type index_SaleReceiptItem as SaleReceiptItem, type index_SaleReceiptPayment as SaleReceiptPayment, type index_SpaceSize as SpaceSize, type index_Tokens as Tokens, index_buildCashSessionReceipt as buildCashSessionReceipt, index_buildExpenseReceipt as buildExpenseReceipt, index_buildPaymentReceipt as buildPaymentReceipt, index_buildSaleReceipt as buildSaleReceipt, index_compact as compact, index_deaccent as deaccent, index_decimalsOf as decimalsOf, index_footerBlocks as footerBlocks, index_formatAmount as formatAmount, index_formatBare as formatBare, index_formatMoney as formatMoney, index_formatPoints as formatPoints, index_formatQuantity as formatQuantity, index_leading as leading, index_leadingOf as leadingOf, index_orgHeaderBlocks as orgHeaderBlocks, index_symbolOf as symbolOf, index_tokensFor as tokensFor };
+  export { index_AmountRow as AmountRow, type index_BaseDocumentData as BaseDocumentData, index_Block as Block, type index_CashSessionCurrencyLine as CashSessionCurrencyLine, type index_CashSessionReceiptData as CashSessionReceiptData, type index_CurrencyOverride as CurrencyOverride, type index_CurrencyOverrides as CurrencyOverrides, index_DOCUMENT_IDENTITIES as DOCUMENT_IDENTITIES, index_DUPLICATE_CHIP as DUPLICATE_CHIP, type index_DebtData as DebtData, type index_DocumentIdentity as DocumentIdentity, type index_DocumentKind as DocumentKind, type index_ExpenseReceiptData as ExpenseReceiptData, index_FONTS as FONTS, index_FontRole as FontRole, index_FontSpec as FontSpec, index_ItemRow as ItemRow, index_KvRow as KvRow, index_LoadedLogo as LoadedLogo, type index_LoyaltyData as LoyaltyData, index_OrgIdentity as OrgIdentity, index_PaperWidth as PaperWidth, type index_PaymentReceiptData as PaymentReceiptData, index_ReceiptChrome as ReceiptChrome, index_RuleWeight as RuleWeight, type index_SaleReceiptData as SaleReceiptData, type index_SaleReceiptItem as SaleReceiptItem, type index_SaleReceiptPayment as SaleReceiptPayment, index_SpaceSize as SpaceSize, index_Tokens as Tokens, index_buildCashSessionReceipt as buildCashSessionReceipt, index_buildExpenseReceipt as buildExpenseReceipt, index_buildPaymentReceipt as buildPaymentReceipt, index_buildSaleReceipt as buildSaleReceipt, index_compact as compact, index_deaccent as deaccent, index_decimalsOf as decimalsOf, index_footerBlocks as footerBlocks, index_formatAmount as formatAmount, index_formatBare as formatBare, index_formatMoney as formatMoney, index_formatPoints as formatPoints, index_formatQuantity as formatQuantity, index_leading as leading, index_leadingOf as leadingOf, index_orgHeaderBlocks as orgHeaderBlocks, index_symbolOf as symbolOf, index_tokensFor as tokensFor };
 }
 
-export { type AmountRow as A, type BaseDocumentData as B, type CashSessionCurrencyLine as C, DOCUMENT_IDENTITIES as D, type ExpenseReceiptData as E, FONTS as F, formatBare as G, formatMoney as H, type ItemRow as I, formatPoints as J, type KvRow as K, type LoadedLogo as L, formatQuantity as M, leading as N, type OrgIdentity as O, type PaperWidth as P, leadingOf as Q, type ReceiptChrome as R, type SaleReceiptData as S, type Tokens as T, orgHeaderBlocks as U, symbolOf as V, tokensFor as W, type Block as a, type CashSessionReceiptData as b, type CurrencyOverride as c, type CurrencyOverrides as d, DUPLICATE_CHIP as e, type DebtData as f, type DocumentIdentity as g, type DocumentKind as h, index as i, type FontRole as j, type FontSpec as k, type LoyaltyData as l, type PaymentReceiptData as m, type RuleWeight as n, type SaleReceiptItem as o, type SaleReceiptPayment as p, type SpaceSize as q, buildCashSessionReceipt as r, buildExpenseReceipt as s, buildPaymentReceipt as t, buildSaleReceipt as u, compact as v, deaccent as w, decimalsOf as x, footerBlocks as y, formatAmount as z };
+export { type BaseDocumentData as B, type CashSessionCurrencyLine as C, DOCUMENT_IDENTITIES as D, type ExpenseReceiptData as E, type LoyaltyData as L, type PaymentReceiptData as P, type SaleReceiptData as S, type CashSessionReceiptData as a, type CurrencyOverride as b, type CurrencyOverrides as c, DUPLICATE_CHIP as d, type DebtData as e, type DocumentIdentity as f, type DocumentKind as g, type SaleReceiptItem as h, index as i, type SaleReceiptPayment as j, buildCashSessionReceipt as k, buildExpenseReceipt as l, buildPaymentReceipt as m, buildSaleReceipt as n, deaccent as o, decimalsOf as p, formatAmount as q, formatBare as r, formatMoney as s, formatPoints as t, formatQuantity as u, symbolOf as v };

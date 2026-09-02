@@ -1,6 +1,6 @@
 {
   "name": "@vente-facile/core",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "Regles metier partagees entre le back-office web et l'application mobile Vente Facile.",
   "license": "UNLICENSED",
   "private": false,
@@ -24,6 +24,11 @@
       "types": "./dist/pos/index.d.ts",
       "import": "./dist/pos/index.js",
       "require": "./dist/pos/index.cjs"
+    },
+    "./report": {
+      "types": "./dist/report/index.d.ts",
+      "import": "./dist/report/index.js",
+      "require": "./dist/report/index.cjs"
     }
   },
   "files": [
