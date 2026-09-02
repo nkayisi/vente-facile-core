@@ -18,3 +18,11 @@ export type {
 export { texteCellule, sousCellule } from "./spec";
 export { rendreRapportHtml } from "./render-html";
 export { cellule, contenuCsv, nomDeFichier, horodatage } from "./csv";
+export {
+  PERIODES_RAPPORT,
+  GROUPEMENTS,
+  bornesRapport,
+  libellePeriode,
+  type PeriodeRapport,
+  type GroupBy,
+} from "./periodes";

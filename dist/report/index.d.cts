@@ -143,4 +143,36 @@ declare function nomDeFichier(nom: string): string;
 /** « 2026-09-02 05h27 » : lisible, triable, sans `Intl` (proscrit ici). */
 declare function horodatage(d?: Date): string;
 
-export { type CelluleRapport, type ColonneRapport, type RapportSpec, cellule, contenuCsv, horodatage, nomDeFichier, rendreRapportHtml, sousCellule, texteCellule };
+type PeriodeRapport = "last_7_days" | "last_30_days" | "last_12_months" | "today" | "week" | "month" | "quarter" | "year" | "custom";
+/** Les libellés du back-office, au caractère près (`PERIOD_OPTIONS`). */
+declare const PERIODES_RAPPORT: {
+    valeur: PeriodeRapport;
+    label: string;
+}[];
+type GroupBy = "day" | "week" | "month";
+/** « Grouper par » du back-office. */
+declare const GROUPEMENTS: {
+    valeur: GroupBy;
+    label: string;
+}[];
+declare function libellePeriode(p: PeriodeRapport): string;
+/**
+ * Bornes INCLUSIVES au format `AAAA-MM-JJ`, comme l'API les attend
+ * (`sale_date__date__gte` / `__lte`).
+ *
+ * Les composantes sont LOCALES, comme `day_bounds()` du serveur : une vente
+ * saisie à 23h30 est déjà le lendemain en UTC et disparaîtrait du rapport du
+ * jour.
+ *
+ * `custom` rend les bornes fournies telles quelles ; à l'appelant de ne pas
+ * l'employer sans elles.
+ */
+declare function bornesRapport(periode: PeriodeRapport, personnalisee?: {
+    debut: string;
+    fin: string;
+}, aujourdhui?: Date): {
+    debut: string;
+    fin: string;
+};
+
+export { type CelluleRapport, type ColonneRapport, GROUPEMENTS, type GroupBy, PERIODES_RAPPORT, type PeriodeRapport, type RapportSpec, bornesRapport, cellule, contenuCsv, horodatage, libellePeriode, nomDeFichier, rendreRapportHtml, sousCellule, texteCellule };
