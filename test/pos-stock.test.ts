@@ -73,7 +73,7 @@ describe("Bornes de stock", () => {
     const beaucoupDeVrac = { ...casier, stock_quantity: 60, stock_packages: 3, stock_loose: 24 };
     const v = verifierAjout(beaucoupDeVrac, [], { packages: 4, loose: 0 });
     expect(v.ok).toBe(false);
-    expect(v.raison).toBe("Il ne reste que 3 casiers scellés pour Primus 65cl.");
+    expect(v.raison).toBe("Il ne reste que 3 casiers en scellé pour Primus 65cl.");
     expect(verifierAjout(beaucoupDeVrac, [], { packages: 3, loose: 0 }).ok).toBe(true);
   });
 
@@ -89,7 +89,7 @@ describe("Bornes de stock", () => {
   it("accorde le singulier au dernier contenant", () => {
     const unSeulCasier = { ...casier, stock_quantity: 48, stock_packages: 1, stock_loose: 36 };
     expect(verifierAjout(unSeulCasier, [], { packages: 2, loose: 0 }).raison).toBe(
-      "Il ne reste que 1 casier scellé pour Primus 65cl."
+      "Il ne reste que 1 casier en scellé pour Primus 65cl."
     );
   });
 

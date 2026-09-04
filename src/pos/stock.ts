@@ -186,12 +186,25 @@ export function verifierAjout(
     const scelles = addableSealed(product, lines);
     if (scelles !== null && packages > scelles) {
       const mot = product.packaging_unit_name?.trim() || "contenant";
+      // ┌──────────────────────────────────────────────────────────────────┐
+      // │ « EN SCELLÉ », LOCUTION INVARIABLE.                              │
+      // │                                                                  │
+      // │ Le message accordait « scellé » au masculin pluriel, ce qui       │
+      // │ donnait « 3 BOITES scellés » sous les yeux du caissier. Le GENRE  │
+      // │ d'un nom de contenant n'est pas dérivable - il vient du marchand, │
+      // │ souvent en capitales et parfois déjà au pluriel - et aucun        │
+      // │ lexique ne le tranchera. La locution invariable marche pour les   │
+      // │ deux genres, comme « ouvrir des BOITES » l'a fait au lot 7.       │
+      // │                                                                  │
+      // │ Le `s` du contenant reste, lui, un pari assumé sur une saisie au  │
+      // │ singulier : c'est la convention du reste du produit.              │
+      // └──────────────────────────────────────────────────────────────────┘
       return {
         ...base,
         ok: false,
-        raison: `Il ne reste que ${scelles} ${mot}${scelles > 1 ? "s" : ""} scellé${
+        raison: `Il ne reste que ${scelles} ${mot}${
           scelles > 1 ? "s" : ""
-        } pour ${nom}.`,
+        } en scellé pour ${nom}.`,
       };
     }
   }

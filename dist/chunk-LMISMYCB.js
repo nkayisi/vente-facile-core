@@ -621,7 +621,7 @@ function verifierAjout(product, lines, saisie) {
       return {
         ...base,
         ok: false,
-        raison: `Il ne reste que ${scelles} ${mot}${scelles > 1 ? "s" : ""} scell\xE9${scelles > 1 ? "s" : ""} pour ${nom}.`
+        raison: `Il ne reste que ${scelles} ${mot}${scelles > 1 ? "s" : ""} en scell\xE9 pour ${nom}.`
       };
     }
   }
@@ -686,4 +686,4 @@ export {
   verifierAjout,
   pos_exports
 };
-//# sourceMappingURL=chunk-ZHBN4SRC.js.map
+//# sourceMappingURL=chunk-LMISMYCB.js.map
