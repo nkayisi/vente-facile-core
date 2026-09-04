@@ -41,6 +41,7 @@ __export(pos_exports, {
   pointValue: () => pointValue,
   r2: () => r2,
   roundPoints: () => roundPoints,
+  saleCurrencyTotals: () => saleCurrencyTotals,
   tendersIn: () => tendersIn,
   totalInSaleCurrency: () => totalInSaleCurrency,
   verifierAjout: () => verifierAjout
@@ -190,7 +191,7 @@ function basketTotals({ lines, globalDiscountAmount = 0 }) {
     total: r2(subtotal - itemDiscount - globalDiscount + tax)
   };
 }
-function totalInSaleCurrency({
+function saleCurrencyTotals({
   lines,
   currencies,
   invoiceCurrency,
@@ -202,11 +203,17 @@ function totalInSaleCurrency({
   let subtotal = 0;
   let itemDiscount = 0;
   let tax = 0;
+  const perLine = [];
   for (const line of lines) {
     const unit = currencies.convertMoney(line.unit_price, primary, cur);
+    const packageUnitPrice = currencies.convertMoney(
+      num(line.product.wholesale_price),
+      primary,
+      cur
+    );
     const factor = packagingFactorOf(line.product);
     const gross = factor && line.packageQuantity > 0 ? currencies.round(
-      line.packageQuantity * currencies.convertMoney(num(line.product.wholesale_price), primary, cur) + looseQuantityOf(line) * unit,
+      line.packageQuantity * packageUnitPrice + looseQuantityOf(line) * unit,
       cur
     ) : currencies.round(line.quantity * unit, cur);
     const discount = currencies.round(gross * line.discount_percentage / 100, cur);
@@ -215,11 +222,24 @@ function totalInSaleCurrency({
     if (line.product.is_taxable) {
       tax += currencies.round((gross - discount) * num(line.product.tax_rate) / 100, cur);
     }
+    perLine.push({ gross, discount, unitPrice: unit, packageUnitPrice });
   }
   const { globalDiscount } = basketTotals({ lines, globalDiscountAmount });
   const globalDisc = currencies.convertMoney(globalDiscount, primary, cur);
   const loyaltyDisc = currencies.convertMoney(loyaltyDiscount2, primary, cur);
-  return currencies.round(subtotal - itemDiscount - globalDisc - loyaltyDisc + tax, cur);
+  return {
+    currency: cur,
+    subtotal,
+    itemDiscount,
+    globalDiscount: globalDisc,
+    loyaltyDiscount: loyaltyDisc,
+    tax,
+    total: currencies.round(subtotal - itemDiscount - globalDisc - loyaltyDisc + tax, cur),
+    lines: perLine
+  };
+}
+function totalInSaleCurrency(input) {
+  return saleCurrencyTotals(input).total;
 }
 function tendersIn(tenders, currencies, target) {
   return currencies.round(
@@ -463,6 +483,7 @@ function verifierAjout(product, lines, saisie) {
   pointValue,
   r2,
   roundPoints,
+  saleCurrencyTotals,
   tendersIn,
   totalInSaleCurrency,
   verifierAjout

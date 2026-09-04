@@ -142,36 +142,80 @@ export interface SaleCurrencyInput extends BasketInput {
   loyaltyDiscount?: number;
 }
 
+/** Ce qu'une ligne pèse dans la devise de FACTURE. */
+export interface SaleCurrencyLine {
+  /** Brut de la ligne, conditionnements et détail réunis. */
+  gross: number;
+  /** Remise de ligne, déjà arrondie dans la devise de facture. */
+  discount: number;
+  /** Prix d'une unité de détail. */
+  unitPrice: number;
+  /** Prix d'un conditionnement ; sans objet pour un produit vendu à l'unité. */
+  packageUnitPrice: number;
+}
+
+/** Ventilation d'une facture, dans sa propre devise. Miroir de `BasketTotals`. */
+export interface SaleCurrencyTotals {
+  /** La devise dans laquelle TOUS les champs qui suivent sont exprimés. */
+  currency: string;
+  subtotal: number;
+  itemDiscount: number;
+  globalDiscount: number;
+  loyaltyDiscount: number;
+  tax: number;
+  /** Total net, remise fidélité comprise. */
+  total: number;
+  /** Une entrée par ligne du panier, DANS L'ORDRE. */
+  lines: SaleCurrencyLine[];
+}
+
 /**
- * Total de la facture, exprimé dans sa propre devise.
+ * Ventilation complète de la facture, exprimée dans SA PROPRE devise.
  *
  * L'ordre des opérations n'est pas négociable : convertir puis arrondir CHAQUE
  * prix unitaire, puis sommer. C'est ce que le serveur fera de ce qu'on lui
  * envoie. Sommer d'abord et convertir ensuite donne un montant qui diverge de
  * la facture émise, donc un `amount_due` et une monnaie rendue faux.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ CETTE VENTILATION EST CELLE QUE LE CLIENT LIT.                          │
+ * │                                                                          │
+ * │ `basketTotals()` rend la même chose en devise PRINCIPALE, et les deux ne │
+ * │ sont pas interchangeables : la principale sert aux CONTRÔLES (solde du   │
+ * │ client, plafond de crédit, valeur des points), celle-ci sert à tout ce   │
+ * │ qui s'affiche et s'imprime - le total annoncé, la monnaie rendue, le     │
+ * │ ticket. Prendre l'une pour l'autre écrit un montant juste sous une       │
+ * │ étiquette fausse, ce qui ne se voit pas tant que l'établissement facture │
+ * │ dans sa devise principale, et se voit sur le papier du client dès qu'il  │
+ * │ facture ailleurs.                                                        │
+ * └──────────────────────────────────────────────────────────────────────────┘
  */
-export function totalInSaleCurrency({
+export function saleCurrencyTotals({
   lines,
   currencies,
   invoiceCurrency,
   globalDiscountAmount = 0,
   loyaltyDiscount = 0,
-}: SaleCurrencyInput): number {
+}: SaleCurrencyInput): SaleCurrencyTotals {
   const cur = invoiceCurrency || currencies.primary;
   const primary = currencies.primary;
   let subtotal = 0;
   let itemDiscount = 0;
   let tax = 0;
+  const perLine: SaleCurrencyLine[] = [];
 
   for (const line of lines) {
     const unit = currencies.convertMoney(line.unit_price, primary, cur);
+    const packageUnitPrice = currencies.convertMoney(
+      num(line.product.wholesale_price),
+      primary,
+      cur
+    );
     const factor = packagingFactorOf(line.product);
     const gross =
       factor && line.packageQuantity > 0
         ? currencies.round(
-            line.packageQuantity *
-              currencies.convertMoney(num(line.product.wholesale_price), primary, cur) +
-              looseQuantityOf(line) * unit,
+            line.packageQuantity * packageUnitPrice + looseQuantityOf(line) * unit,
             cur
           )
         : currencies.round(line.quantity * unit, cur);
@@ -181,6 +225,7 @@ export function totalInSaleCurrency({
     if (line.product.is_taxable) {
       tax += currencies.round(((gross - discount) * num(line.product.tax_rate)) / 100, cur);
     }
+    perLine.push({ gross, discount, unitPrice: unit, packageUnitPrice });
   }
 
   const { globalDiscount } = basketTotals({ lines, globalDiscountAmount });
@@ -189,7 +234,26 @@ export function totalInSaleCurrency({
   // à `discount_amount` sur la vente déjà totalisée.
   const loyaltyDisc = currencies.convertMoney(loyaltyDiscount, primary, cur);
 
-  return currencies.round(subtotal - itemDiscount - globalDisc - loyaltyDisc + tax, cur);
+  return {
+    currency: cur,
+    subtotal,
+    itemDiscount,
+    globalDiscount: globalDisc,
+    loyaltyDiscount: loyaltyDisc,
+    tax,
+    total: currencies.round(subtotal - itemDiscount - globalDisc - loyaltyDisc + tax, cur),
+    lines: perLine,
+  };
+}
+
+/**
+ * Total de la facture, exprimé dans sa propre devise.
+ *
+ * Accesseur de `saleCurrencyTotals` : c'est la lecture la plus fréquente, et
+ * elle a des appelants dans les deux surfaces.
+ */
+export function totalInSaleCurrency(input: SaleCurrencyInput): number {
+  return saleCurrencyTotals(input).total;
 }
 
 export interface TenderLike {

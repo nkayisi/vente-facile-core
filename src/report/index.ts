@@ -1,23 +1,26 @@
 /**
- * Le document de RAPPORT, partagé par le back-office et le terminal.
+ * Ce que le paquet partagé garde des RAPPORTS.
  *
- * Un rapport se DÉCRIT (`RapportSpec`) et se REND (`rendreRapportHtml`,
- * `contenuCsv`). Les deux surfaces impriment la MÊME chaîne : le back-office
- * par le navigateur, le terminal par `expo-print`. Il n'y a donc plus de mise
- * en page à tenir en phase.
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ LES RAPPORTS SONT FABRIQUÉS PAR LE SERVEUR.                             │
+ * │                                                                          │
+ * │ Ce module a porté une description (`RapportSpec`), une mise en page HTML │
+ * │ et un rendu CSV, pour que le back-office et le terminal impriment la     │
+ * │ MÊME chaîne. Les trois documents viennent désormais du serveur           │
+ * │ (`apps/core/exports.py`), qui sert le PDF, le classeur et le CSV : les   │
+ * │ deux surfaces ne font plus que télécharger des octets. Ce qui restait    │
+ * │ n'avait plus d'appelant et a été retiré.                                 │
+ * │                                                                          │
+ * │ Ne subsiste que ce que le serveur ne peut pas faire : nommer un fichier  │
+ * │ au moment où l'appareil le range, et calculer les fenêtres de période    │
+ * │ que l'écran affiche avant tout appel.                                    │
+ * └──────────────────────────────────────────────────────────────────────────┘
  *
  * À ne pas confondre avec `@vente-facile/core/receipt`, qui décrit les
  * documents de COMPTOIR - tickets, reçus, Z - sur un rouleau de cinquante-huit
- * millimètres. Un rapport de sept colonnes n'y entre pas.
+ * millimètres, et qui doivent sortir hors ligne.
  */
-export type {
-  ColonneRapport,
-  CelluleRapport,
-  RapportSpec,
-} from "./spec";
-export { texteCellule, sousCellule } from "./spec";
-export { rendreRapportHtml } from "./render-html";
-export { cellule, contenuCsv, nomDeFichier, horodatage } from "./csv";
+export { nomDeFichier } from "./nom-fichier";
 export {
   PERIODES_RAPPORT,
   GROUPEMENTS,

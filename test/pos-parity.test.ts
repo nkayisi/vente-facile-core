@@ -15,6 +15,7 @@ import {
   createCurrencyTable,
   basketTotals,
   totalInSaleCurrency,
+  saleCurrencyTotals,
   tendersIn,
   lineGross,
   maxLoyaltyAmount,
@@ -263,6 +264,49 @@ describe("POS : l'extraction n'a rien changé", () => {
         paidInSale: tendersIn(tenders, table, invoiceCurrency),
       };
 
+      // ┌────────────────────────────────────────────────────────────────────┐
+      // │ LA VENTILATION DOIT REDONNER SON PROPRE TOTAL.                    │
+      // │                                                                    │
+      // │ `saleCurrencyTotals` a été extraite de `totalInSaleCurrency` pour  │
+      // │ que le ticket puisse lire le détail de ce qu'il imprime. Les deux  │
+      // │ doivent rester la MÊME arithmétique : si elles divergent, l'écran  │
+      // │ annonce un total et le papier en additionne un autre.             │
+      // └────────────────────────────────────────────────────────────────────┘
+      const ventilation = saleCurrencyTotals({
+        lines, currencies: table, invoiceCurrency,
+        globalDiscountAmount, loyaltyDiscount: discount,
+      });
+      if (ventilation.total !== after.totalInSale) {
+        divergences.push(
+          `graine ${seed}, ventilation.total : ${ventilation.total} !== ${after.totalInSale}`
+        );
+      }
+      if (ventilation.lines.length !== lines.length) {
+        divergences.push(`graine ${seed}, ventilation : ${ventilation.lines.length} lignes pour ${lines.length}`);
+      }
+      const sommeBrute = ventilation.lines.reduce((s, l) => s + l.gross, 0);
+      if (sommeBrute !== ventilation.subtotal) {
+        divergences.push(
+          `graine ${seed}, somme des lignes : ${sommeBrute} !== ${ventilation.subtotal}`
+        );
+      }
+      const sommeRemises = ventilation.lines.reduce((s, l) => s + l.discount, 0);
+      if (sommeRemises !== ventilation.itemDiscount) {
+        divergences.push(
+          `graine ${seed}, remises de ligne : ${sommeRemises} !== ${ventilation.itemDiscount}`
+        );
+      }
+      const recompose = table.round(
+        ventilation.subtotal - ventilation.itemDiscount - ventilation.globalDiscount
+          - ventilation.loyaltyDiscount + ventilation.tax,
+        invoiceCurrency
+      );
+      if (recompose !== ventilation.total) {
+        divergences.push(
+          `graine ${seed}, recomposition : ${recompose} !== ${ventilation.total}`
+        );
+      }
+
       for (const key of Object.keys(before) as (keyof typeof before)[]) {
         if (before[key] !== after[key]) {
           divergences.push(`graine ${seed}, ${key} : ${before[key]} !== ${after[key]}`);
@@ -316,6 +360,49 @@ describe("POS : les règles qui décident de l'argent", () => {
     }));
     expect(totalInSaleCurrency({ lines, currencies: table, invoiceCurrency: "USD" })).toBe(1.08);
     expect(table.round(3000 / 2800, "USD")).toBe(1.07);
+  });
+
+  it("ne rend PAS le meme total en principale et en facture, et c'est le piege", () => {
+    // ┌──────────────────────────────────────────────────────────────────────┐
+    // │ CE TEST EXISTE PARCE QUE LE TICKET DU TERMINAL S'Y EST TROMPE.      │
+    // │                                                                      │
+    // │ `basketTotals` somme les `unit_price` SANS conversion : ils sont     │
+    // │ tenus en devise principale, donc son total l'est aussi. Une facture  │
+    // │ en USD sur un etablissement tenu en CDF vaut 2 800 fois moins. Ranger │
+    // │ l'un sous l'etiquette de l'autre imprime un montant juste sous une    │
+    // │ devise fausse - invisible tant que les deux coincident, et c'est le   │
+    // │ cas de toutes les donnees de developpement.                          │
+    // └──────────────────────────────────────────────────────────────────────┘
+    const lines: BasketLine[] = [
+      { product: { selling_mode: "retail_only" }, quantity: 2, packageQuantity: 0, unit_price: 140000, discount_percentage: 0 },
+    ];
+    const principale = basketTotals({ lines });
+    const facture = saleCurrencyTotals({ lines, currencies: table, invoiceCurrency: "USD" });
+
+    expect(principale.total).toBe(280000);   // CDF
+    expect(facture.total).toBe(100);         // USD
+    expect(facture.currency).toBe("USD");
+    // La ventilation NOMME sa devise : c'est ce qui permet a un appelant de
+    // verifier qu'il etiquette bien ce qu'il affiche.
+    expect(saleCurrencyTotals({ lines, currencies: table }).currency).toBe("CDF");
+  });
+
+  it("rend le prix unitaire ET le prix du contenant dans la devise de facture", () => {
+    // Le ticket imprime « 2 x 92 000 » sous le nom de l'article : ce prix
+    // unitaire doit etre celui de la FACTURE, sinon la ligne ne se recompose
+    // pas a partir de ce que le client lit.
+    const line: BasketLine = {
+      product: { selling_mode: "wholesale_and_retail", units_per_package: 12, wholesale_price: "50400" },
+      quantity: 14,
+      packageQuantity: 1,
+      unit_price: 5600,
+      discount_percentage: 0,
+    };
+    const v = saleCurrencyTotals({ lines: [line], currencies: table, invoiceCurrency: "USD" });
+    expect(v.lines[0].unitPrice).toBe(2);          // 5 600 CDF / 2 800
+    expect(v.lines[0].packageUnitPrice).toBe(18);  // 50 400 CDF / 2 800
+    // Un contenant plus deux unites isolees : 18 + 2 x 2.
+    expect(v.lines[0].gross).toBe(22);
   });
 
   it("ne donne aucune remise sous le minimum du programme, au lieu de l'ignorer", () => {

@@ -1,11 +1,4 @@
 import {
-  SUPPORTED_CURRENCIES,
-  getCurrencyByCode,
-  getCurrencyName,
-  getCurrencySymbol,
-  receipt_exports
-} from "./chunk-3QGXYJKJ.js";
-import {
   MONEY_EPS,
   NNBSP,
   availableBase,
@@ -41,7 +34,14 @@ import {
   splitPackaged,
   toBaseQuantity,
   weekdayLong
-} from "./chunk-LMISMYCB.js";
+} from "./chunk-VFDBNXRO.js";
+import {
+  SUPPORTED_CURRENCIES,
+  getCurrencyByCode,
+  getCurrencyName,
+  getCurrencySymbol,
+  receipt_exports
+} from "./chunk-3QGXYJKJ.js";
 import "./chunk-PZ5AY32C.js";
 
 // src/pricing.ts

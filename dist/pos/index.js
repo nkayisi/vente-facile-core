@@ -20,10 +20,11 @@ import {
   pointValue,
   r2,
   roundPoints,
+  saleCurrencyTotals,
   tendersIn,
   totalInSaleCurrency,
   verifierAjout
-} from "../chunk-LMISMYCB.js";
+} from "../chunk-VFDBNXRO.js";
 import "../chunk-PZ5AY32C.js";
 export {
   MONEY_EPS,
@@ -47,6 +48,7 @@ export {
   pointValue,
   r2,
   roundPoints,
+  saleCurrencyTotals,
   tendersIn,
   totalInSaleCurrency,
   verifierAjout
