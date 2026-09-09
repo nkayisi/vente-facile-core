@@ -37,6 +37,8 @@
  * │ le terminal écrivait les bornes, le back-office « ( au ) », parce qu'il  │
  * │ ne les calculait que pour la période personnalisée.                      │
  * └──────────────────────────────────────────────────────────────────────────┘
+ */
+
 /**
  * « 2026-08-31 », sur les composantes LOCALES.
  *
