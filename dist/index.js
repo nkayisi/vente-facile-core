@@ -41,7 +41,7 @@ import {
   getCurrencyName,
   getCurrencySymbol,
   receipt_exports
-} from "./chunk-3QGXYJKJ.js";
+} from "./chunk-OUTD6HX7.js";
 import "./chunk-PZ5AY32C.js";
 
 // src/pricing.ts

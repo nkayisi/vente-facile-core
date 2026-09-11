@@ -57,32 +57,53 @@ export interface Tokens {
   indent: number;
   /** Hauteur maximale du logo. */
   logoMaxHeight: number;
-  /** Bornes horizontales des colonnes du tableau d'articles, en fraction. */
-  itemCols: { name: number; qty: number; unitPrice: number };
 }
 
 const BASE = {
-  margin: 2.5,
   topPadding: 5,
   bottomPadding: 6,
   space: { xs: 1, sm: 2, md: 3, lg: 5 },
   rule: { heavy: 0.4, light: 0.15, hair: 0.08 },
   minGap: 2,
   indent: 2,
-  logoMaxHeight: 12,
 } as const;
 
+/**
+ * Blanc latéral, de chaque côté du contenu.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ UN TICKET N'EST PAS UNE PAGE : SA MARGE EST DÉJÀ MÉCANIQUE.             │
+ * │                                                                          │
+ * │ Sur un rouleau de 58 mm, la tête ne chauffe que 48 mm - 384 points à     │
+ * │ 203 par pouce. Cinq millimètres de chaque bord sont donc BLANCS quoi     │
+ * │ qu'on fasse : aucun réglage, aucune feuille de style ne peut y imprimer. │
+ * │                                                                          │
+ * │ Les 2,5 mm d'origine venaient d'une marge de DOCUMENT et s'ajoutaient à  │
+ * │ ces cinq-là : le contenu ne couvrait que 43,9 mm des 58, soit trois      │
+ * │ quarts du papier, sur un support qui coûte cher au marchand. Un          │
+ * │ millimètre suffit à ne pas coller le texte au bord de la bande d'encre.  │
+ * │                                                                          │
+ * │ Il ne peut RIEN faire déborder : la page est mise à l'échelle exacte de  │
+ * │ la bande chauffée, donc réduire cette marge élargit le contenu et ne     │
+ * │ déplace aucun bord.                                                      │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+function marginFor(paperWidth: PaperWidth): number {
+  return paperWidth >= 80 ? 1.5 : 1;
+}
+
 export function tokensFor(paperWidth: PaperWidth): Tokens {
+  const margin = marginFor(paperWidth);
   return {
     ...BASE,
     space: { ...BASE.space },
     rule: { ...BASE.rule },
     paperWidth,
-    contentWidth: paperWidth - BASE.margin * 2,
-    itemCols:
-      paperWidth === 80
-        ? { name: 0.46, qty: 0.6, unitPrice: 0.78 }
-        : { name: 0.4, qty: 0.45, unitPrice: 0.7 },
+    margin,
+    contentWidth: paperWidth - margin * 2,
+    // Un logo plafonné à 12 mm sur un rouleau de 80 paraît minuscule : la
+    // hauteur suit le papier, comme la largeur utile.
+    logoMaxHeight: paperWidth >= 80 ? 16 : 12,
   };
 }
 

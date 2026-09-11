@@ -44,23 +44,28 @@ var FONTS = {
   legal: { size: 7, bold: false }
 };
 var BASE = {
-  margin: 2.5,
   topPadding: 5,
   bottomPadding: 6,
   space: { xs: 1, sm: 2, md: 3, lg: 5 },
   rule: { heavy: 0.4, light: 0.15, hair: 0.08 },
   minGap: 2,
-  indent: 2,
-  logoMaxHeight: 12
+  indent: 2
 };
+function marginFor(paperWidth) {
+  return paperWidth >= 80 ? 1.5 : 1;
+}
 function tokensFor(paperWidth) {
+  const margin = marginFor(paperWidth);
   return {
     ...BASE,
     space: { ...BASE.space },
     rule: { ...BASE.rule },
     paperWidth,
-    contentWidth: paperWidth - BASE.margin * 2,
-    itemCols: paperWidth === 80 ? { name: 0.46, qty: 0.6, unitPrice: 0.78 } : { name: 0.4, qty: 0.45, unitPrice: 0.7 }
+    margin,
+    contentWidth: paperWidth - margin * 2,
+    // Un logo plafonné à 12 mm sur un rouleau de 80 paraît minuscule : la
+    // hauteur suit le papier, comme la largeur utile.
+    logoMaxHeight: paperWidth >= 80 ? 16 : 12
   };
 }
 function leading(size) {
@@ -669,4 +674,4 @@ export {
   buildExpenseReceipt,
   receipt_exports
 };
-//# sourceMappingURL=chunk-3QGXYJKJ.js.map
+//# sourceMappingURL=chunk-OUTD6HX7.js.map

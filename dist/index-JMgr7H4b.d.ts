@@ -36,12 +36,6 @@ interface Tokens {
     indent: number;
     /** Hauteur maximale du logo. */
     logoMaxHeight: number;
-    /** Bornes horizontales des colonnes du tableau d'articles, en fraction. */
-    itemCols: {
-        name: number;
-        qty: number;
-        unitPrice: number;
-    };
 }
 declare function tokensFor(paperWidth: PaperWidth): Tokens;
 /**
