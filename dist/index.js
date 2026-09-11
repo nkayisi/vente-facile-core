@@ -34,7 +34,7 @@ import {
   splitPackaged,
   toBaseQuantity,
   weekdayLong
-} from "./chunk-VFDBNXRO.js";
+} from "./chunk-JLQFMJRB.js";
 import {
   SUPPORTED_CURRENCIES,
   getCurrencyByCode,

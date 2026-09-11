@@ -18,7 +18,12 @@
  * précisément pourquoi ils ne peuvent pas porter le même nom.
  */
 import { remainingChannels, type ChannelAvailability } from "../packaging";
-import { packagingFactorOf, looseQuantityOf, type BasketLine } from "./basket";
+import {
+  packagingFactorOf,
+  looseQuantityOf,
+  type BasketLine,
+  type BasketProduct,
+} from "./basket";
 
 export interface StockedProductLike {
   id: string;
@@ -210,4 +215,83 @@ export function verifierAjout(
   }
 
   return { ...base, ok: true, raison: null };
+}
+
+/** Une ligne du panier dont le produit porte ses compteurs de stock. */
+export interface LigneStockee extends BasketLine {
+  product: BasketProduct & StockedProductLike;
+}
+
+/** Ce qui empêche une ligne d'être encaissée. */
+export interface Rupture {
+  /** Rang de la ligne dans le panier, pour la désigner à l'écran. */
+  index: number;
+  productId: string;
+  name: string;
+  /** Le message de `verifierAjout`, en français, avec son chiffre. */
+  raison: string;
+}
+
+/**
+ * Les lignes que le stock ne couvre pas.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ LE REFUS DE STOCK A CHANGÉ DE PLACE, IL N'A PAS DISPARU.                 │
+ * │                                                                          │
+ * │ Le comptoir refusait l'AJOUT d'un article en rupture. Il l'accepte        │
+ * │ désormais, et c'est l'ENCAISSEMENT qui ferme. L'invariant qui compte est  │
+ * │ intact : aucun ticket de vente n'est jamais imprimé pour une vente que le │
+ * │ serveur refusera. Ce qui devient possible, c'est de chiffrer une commande │
+ * │ et d'en sortir une PROFORMA, document qui dit lui-même n'être pas un reçu.│
+ * │                                                                          │
+ * │ Avant, un client qui demandait un article épuisé se heurtait à une tuile  │
+ * │ grise sans explication. Il repart maintenant avec un devis.               │
+ * │                                                                          │
+ * │ Le verrou d'INVENTAIRE, lui, ne bouge pas : il reste un refus à l'ajout,  │
+ * │ des deux côtés. Le serveur l'oppose avant même de regarder les quantités, │
+ * │ et ce n'est pas un manque que le marchand peut résoudre au comptoir.      │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * ⚠ CHAQUE LIGNE SE VÉRIFIE CONTRE LE PANIER PRIVÉ D'ELLE-MÊME. `verifierAjout`
+ * compte ce qui est déjà au panier ; lui passer la liste entière ferait qu'une
+ * ligne posée exactement sur le disponible se compterait CONTRE ELLE-MÊME, et
+ * tout panier deviendrait alors non encaissable. C'est l'exclusion que le
+ * réducteur applique déjà quand il modifie une ligne existante.
+ */
+export function lignesEnRupture(lines: LigneStockee[]): Rupture[] {
+  const ruptures: Rupture[] = [];
+
+  lines.forEach((ligne, index) => {
+    // Une ligne vide n'est pas une rupture de stock : `verifierAjout` la
+    // refuserait par « Indiquez une quantité », message qui n'a rien à faire
+    // dans un bandeau de rupture. Elle ne devrait pas exister, et si elle
+    // existe c'est un autre défaut.
+    if (ligne.quantity < 1) return;
+
+    const autres = lines.filter((_, i) => i !== index);
+    const verdict = verifierAjout(ligne.product, autres, {
+      packages: ligne.packageQuantity,
+      loose: looseQuantityOf(ligne),
+    });
+    if (verdict.ok || verdict.raison === null) return;
+
+    ruptures.push({
+      index,
+      productId: ligne.product.id,
+      name: ligne.product.name || "Cet article",
+      raison: verdict.raison,
+    });
+  });
+
+  return ruptures;
+}
+
+/**
+ * Le panier peut-il être encaissé ?
+ *
+ * Faux dès qu'une ligne est en rupture. La proforma, elle, reste ouverte : c'est
+ * tout l'intérêt de séparer les deux.
+ */
+export function panierServable(lines: LigneStockee[]): boolean {
+  return lignesEnRupture(lines).length === 0;
 }

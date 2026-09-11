@@ -596,6 +596,53 @@ interface VerdictAjout {
  * disponible n'apprend rien à qui doit servir un client qui attend.
  */
 declare function verifierAjout(product: StockedProductLike, lines: BasketLine[], saisie: Saisie): VerdictAjout;
+/** Une ligne du panier dont le produit porte ses compteurs de stock. */
+interface LigneStockee extends BasketLine {
+    product: BasketProduct & StockedProductLike;
+}
+/** Ce qui empêche une ligne d'être encaissée. */
+interface Rupture {
+    /** Rang de la ligne dans le panier, pour la désigner à l'écran. */
+    index: number;
+    productId: string;
+    name: string;
+    /** Le message de `verifierAjout`, en français, avec son chiffre. */
+    raison: string;
+}
+/**
+ * Les lignes que le stock ne couvre pas.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ LE REFUS DE STOCK A CHANGÉ DE PLACE, IL N'A PAS DISPARU.                 │
+ * │                                                                          │
+ * │ Le comptoir refusait l'AJOUT d'un article en rupture. Il l'accepte        │
+ * │ désormais, et c'est l'ENCAISSEMENT qui ferme. L'invariant qui compte est  │
+ * │ intact : aucun ticket de vente n'est jamais imprimé pour une vente que le │
+ * │ serveur refusera. Ce qui devient possible, c'est de chiffrer une commande │
+ * │ et d'en sortir une PROFORMA, document qui dit lui-même n'être pas un reçu.│
+ * │                                                                          │
+ * │ Avant, un client qui demandait un article épuisé se heurtait à une tuile  │
+ * │ grise sans explication. Il repart maintenant avec un devis.               │
+ * │                                                                          │
+ * │ Le verrou d'INVENTAIRE, lui, ne bouge pas : il reste un refus à l'ajout,  │
+ * │ des deux côtés. Le serveur l'oppose avant même de regarder les quantités, │
+ * │ et ce n'est pas un manque que le marchand peut résoudre au comptoir.      │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * ⚠ CHAQUE LIGNE SE VÉRIFIE CONTRE LE PANIER PRIVÉ D'ELLE-MÊME. `verifierAjout`
+ * compte ce qui est déjà au panier ; lui passer la liste entière ferait qu'une
+ * ligne posée exactement sur le disponible se compterait CONTRE ELLE-MÊME, et
+ * tout panier deviendrait alors non encaissable. C'est l'exclusion que le
+ * réducteur applique déjà quand il modifie une ligne existante.
+ */
+declare function lignesEnRupture(lines: LigneStockee[]): Rupture[];
+/**
+ * Le panier peut-il être encaissé ?
+ *
+ * Faux dès qu'une ligne est en rupture. La proforma, elle, reste ouverte : c'est
+ * tout l'intérêt de séparer les deux.
+ */
+declare function panierServable(lines: LigneStockee[]): boolean;
 
 /**
  * Arithmétique du point de vente, partagée par le back-office et le mobile.
@@ -612,9 +659,11 @@ type index_CreditCustomerLike = CreditCustomerLike;
 type index_CreditVerdict = CreditVerdict;
 type index_CurrencyFallback = CurrencyFallback;
 type index_CurrencyTable = CurrencyTable;
+type index_LigneStockee = LigneStockee;
 type index_LoyaltyProgramLike = LoyaltyProgramLike;
 declare const index_MONEY_EPS: typeof MONEY_EPS;
 type index_OrganizationCurrencyLike = OrganizationCurrencyLike;
+type index_Rupture = Rupture;
 type index_Saisie = Saisie;
 type index_SaleCurrencyInput = SaleCurrencyInput;
 type index_SaleCurrencyLine = SaleCurrencyLine;
@@ -636,6 +685,7 @@ declare const index_buildSalePayload: typeof buildSalePayload;
 declare const index_createCurrencyTable: typeof createCurrencyTable;
 declare const index_evaluateCredit: typeof evaluateCredit;
 declare const index_inCart: typeof inCart;
+declare const index_lignesEnRupture: typeof lignesEnRupture;
 declare const index_lineGross: typeof lineGross;
 declare const index_looseQuantityOf: typeof looseQuantityOf;
 declare const index_loyaltyDiscount: typeof loyaltyDiscount;
@@ -644,6 +694,7 @@ declare const index_maxLoyaltyAmount: typeof maxLoyaltyAmount;
 declare const index_maxUsablePoints: typeof maxUsablePoints;
 declare const index_minPointsToRedeem: typeof minPointsToRedeem;
 declare const index_packagingFactorOf: typeof packagingFactorOf;
+declare const index_panierServable: typeof panierServable;
 declare const index_pointValue: typeof pointValue;
 declare const index_r2: typeof r2;
 declare const index_roundPoints: typeof roundPoints;
@@ -652,7 +703,7 @@ declare const index_tendersIn: typeof tendersIn;
 declare const index_totalInSaleCurrency: typeof totalInSaleCurrency;
 declare const index_verifierAjout: typeof verifierAjout;
 declare namespace index {
-  export { type index_BasketInput as BasketInput, type index_BasketLine as BasketLine, type index_BasketProduct as BasketProduct, type index_BasketTotals as BasketTotals, type index_CreditCustomerLike as CreditCustomerLike, type index_CreditVerdict as CreditVerdict, type index_CurrencyFallback as CurrencyFallback, type index_CurrencyTable as CurrencyTable, type index_LoyaltyProgramLike as LoyaltyProgramLike, index_MONEY_EPS as MONEY_EPS, type index_OrganizationCurrencyLike as OrganizationCurrencyLike, type index_Saisie as Saisie, type index_SaleCurrencyInput as SaleCurrencyInput, type index_SaleCurrencyLine as SaleCurrencyLine, type index_SaleCurrencyTotals as SaleCurrencyTotals, type index_SaleItemPayload as SaleItemPayload, type index_SalePayload as SalePayload, type index_SalePayloadInput as SalePayloadInput, type index_SalePaymentPayload as SalePaymentPayload, type index_SaleTender as SaleTender, type index_StockedProductLike as StockedProductLike, type index_TenderLike as TenderLike, type index_VerdictAjout as VerdictAjout, index_addableBase as addableBase, index_addableChannels as addableChannels, index_addableLoose as addableLoose, index_addableSealed as addableSealed, index_basketTotals as basketTotals, index_buildSalePayload as buildSalePayload, index_createCurrencyTable as createCurrencyTable, index_evaluateCredit as evaluateCredit, index_inCart as inCart, index_lineGross as lineGross, index_looseQuantityOf as looseQuantityOf, index_loyaltyDiscount as loyaltyDiscount, index_maxGlobalDiscount as maxGlobalDiscount, index_maxLoyaltyAmount as maxLoyaltyAmount, index_maxUsablePoints as maxUsablePoints, index_minPointsToRedeem as minPointsToRedeem, index_packagingFactorOf as packagingFactorOf, index_pointValue as pointValue, index_r2 as r2, index_roundPoints as roundPoints, index_saleCurrencyTotals as saleCurrencyTotals, index_tendersIn as tendersIn, index_totalInSaleCurrency as totalInSaleCurrency, index_verifierAjout as verifierAjout };
+  export { type index_BasketInput as BasketInput, type index_BasketLine as BasketLine, type index_BasketProduct as BasketProduct, type index_BasketTotals as BasketTotals, type index_CreditCustomerLike as CreditCustomerLike, type index_CreditVerdict as CreditVerdict, type index_CurrencyFallback as CurrencyFallback, type index_CurrencyTable as CurrencyTable, type index_LigneStockee as LigneStockee, type index_LoyaltyProgramLike as LoyaltyProgramLike, index_MONEY_EPS as MONEY_EPS, type index_OrganizationCurrencyLike as OrganizationCurrencyLike, type index_Rupture as Rupture, type index_Saisie as Saisie, type index_SaleCurrencyInput as SaleCurrencyInput, type index_SaleCurrencyLine as SaleCurrencyLine, type index_SaleCurrencyTotals as SaleCurrencyTotals, type index_SaleItemPayload as SaleItemPayload, type index_SalePayload as SalePayload, type index_SalePayloadInput as SalePayloadInput, type index_SalePaymentPayload as SalePaymentPayload, type index_SaleTender as SaleTender, type index_StockedProductLike as StockedProductLike, type index_TenderLike as TenderLike, type index_VerdictAjout as VerdictAjout, index_addableBase as addableBase, index_addableChannels as addableChannels, index_addableLoose as addableLoose, index_addableSealed as addableSealed, index_basketTotals as basketTotals, index_buildSalePayload as buildSalePayload, index_createCurrencyTable as createCurrencyTable, index_evaluateCredit as evaluateCredit, index_inCart as inCart, index_lignesEnRupture as lignesEnRupture, index_lineGross as lineGross, index_looseQuantityOf as looseQuantityOf, index_loyaltyDiscount as loyaltyDiscount, index_maxGlobalDiscount as maxGlobalDiscount, index_maxLoyaltyAmount as maxLoyaltyAmount, index_maxUsablePoints as maxUsablePoints, index_minPointsToRedeem as minPointsToRedeem, index_packagingFactorOf as packagingFactorOf, index_panierServable as panierServable, index_pointValue as pointValue, index_r2 as r2, index_roundPoints as roundPoints, index_saleCurrencyTotals as saleCurrencyTotals, index_tendersIn as tendersIn, index_totalInSaleCurrency as totalInSaleCurrency, index_verifierAjout as verifierAjout };
 }
 
-export { loyaltyDiscount as $, type SaleCurrencyLine as A, type BasketInput as B, type ChannelAvailability as C, type SaleCurrencyTotals as D, type SaleItemPayload as E, type SalePayload as F, type SalePayloadInput as G, type SalePaymentPayload as H, type SaleTender as I, type StockedProductLike as J, addableBase as K, type LoyaltyProgramLike as L, MONEY_EPS as M, addableChannels as N, type OrganizationCurrency as O, type PackagedProductLike as P, addableLoose as Q, addableSealed as R, type StockCounters as S, type TenderLike as T, basketTotals as U, type VerdictAjout as V, buildSalePayload as W, evaluateCredit as X, inCart as Y, lineGross as Z, looseQuantityOf as _, type CurrencyFallback as a, maxGlobalDiscount as a0, maxLoyaltyAmount as a1, maxUsablePoints as a2, minPointsToRedeem as a3, packagingFactorOf as a4, pointValue as a5, roundPoints as a6, saleCurrencyTotals as a7, tendersIn as a8, totalInSaleCurrency as a9, verifierAjout as aa, type CurrencyInfo as b, type CurrencyTable as c, type MoneyHelpers as d, type OrganizationCurrencyLike as e, type Packaging as f, availableBase as g, availableSplit as h, createCurrencyTable as i, createMoneyHelpers as j, formatPackaged as k, formatPackagedDifference as l, formatPackagedSplit as m, getPackaging as n, index as o, remainingChannels as p, type BasketLine as q, r2 as r, splitPackaged as s, toBaseQuantity as t, type BasketProduct as u, type BasketTotals as v, type CreditCustomerLike as w, type CreditVerdict as x, type Saisie as y, type SaleCurrencyInput as z };
+export { lignesEnRupture as $, type SaleCurrencyInput as A, type BasketInput as B, type ChannelAvailability as C, type SaleCurrencyLine as D, type SaleCurrencyTotals as E, type SaleItemPayload as F, type SalePayload as G, type SalePayloadInput as H, type SalePaymentPayload as I, type SaleTender as J, type StockedProductLike as K, type LigneStockee as L, MONEY_EPS as M, addableBase as N, type OrganizationCurrency as O, type PackagedProductLike as P, addableChannels as Q, type Rupture as R, type StockCounters as S, type TenderLike as T, addableLoose as U, type VerdictAjout as V, addableSealed as W, basketTotals as X, buildSalePayload as Y, evaluateCredit as Z, inCart as _, type CurrencyFallback as a, lineGross as a0, looseQuantityOf as a1, loyaltyDiscount as a2, maxGlobalDiscount as a3, maxLoyaltyAmount as a4, maxUsablePoints as a5, minPointsToRedeem as a6, packagingFactorOf as a7, panierServable as a8, pointValue as a9, roundPoints as aa, saleCurrencyTotals as ab, tendersIn as ac, totalInSaleCurrency as ad, verifierAjout as ae, type CurrencyInfo as b, type CurrencyTable as c, type MoneyHelpers as d, type OrganizationCurrencyLike as e, type Packaging as f, availableBase as g, availableSplit as h, createCurrencyTable as i, createMoneyHelpers as j, formatPackaged as k, formatPackagedDifference as l, formatPackagedSplit as m, getPackaging as n, index as o, remainingChannels as p, type BasketLine as q, r2 as r, splitPackaged as s, toBaseQuantity as t, type BasketProduct as u, type BasketTotals as v, type CreditCustomerLike as w, type CreditVerdict as x, type LoyaltyProgramLike as y, type Saisie as z };

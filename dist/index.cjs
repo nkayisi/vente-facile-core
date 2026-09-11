@@ -1145,6 +1145,7 @@ __export(pos_exports, {
   createCurrencyTable: () => createCurrencyTable,
   evaluateCredit: () => evaluateCredit,
   inCart: () => inCart,
+  lignesEnRupture: () => lignesEnRupture,
   lineGross: () => lineGross,
   looseQuantityOf: () => looseQuantityOf,
   loyaltyDiscount: () => loyaltyDiscount,
@@ -1153,6 +1154,7 @@ __export(pos_exports, {
   maxUsablePoints: () => maxUsablePoints,
   minPointsToRedeem: () => minPointsToRedeem,
   packagingFactorOf: () => packagingFactorOf,
+  panierServable: () => panierServable,
   pointValue: () => pointValue,
   r2: () => r2,
   roundPoints: () => roundPoints,
@@ -1475,6 +1477,28 @@ function verifierAjout(product, lines2, saisie) {
     }
   }
   return { ...base, ok: true, raison: null };
+}
+function lignesEnRupture(lines2) {
+  const ruptures = [];
+  lines2.forEach((ligne, index) => {
+    if (ligne.quantity < 1) return;
+    const autres = lines2.filter((_, i) => i !== index);
+    const verdict = verifierAjout(ligne.product, autres, {
+      packages: ligne.packageQuantity,
+      loose: looseQuantityOf(ligne)
+    });
+    if (verdict.ok || verdict.raison === null) return;
+    ruptures.push({
+      index,
+      productId: ligne.product.id,
+      name: ligne.product.name || "Cet article",
+      raison: verdict.raison
+    });
+  });
+  return ruptures;
+}
+function panierServable(lines2) {
+  return lignesEnRupture(lines2).length === 0;
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
