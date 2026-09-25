@@ -218,6 +218,19 @@ interface UserPermissions {
     manageable_roles: ManageableRole[];
     /** Toutes les permissions disponibles dans le système */
     all_permissions?: string[];
+    /**
+     * Les entrepôts assignés à ce membre. VIDE pour un propriétaire : c'est son
+     * rôle qui lui donne tout, et c'est ce qui le rend « partout ».
+     *
+     * ⚠ Ce champ vivait HORS du paquet, ajouté au type côté back-office, « parce
+     * qu'y toucher demande de publier un tag ». C'est la donnée d'entrée de la
+     * règle de périmètre : la laisser dehors garantissait que la règle y reste
+     * aussi. Facultatif, donc un serveur antérieur ne ment pas en l'omettant.
+     */
+    assigned_warehouses?: {
+        id: string;
+        name: string;
+    }[];
 }
 declare function hasPermission(userPermissions: UserPermissions | null, permission: string): boolean;
 declare function hasAnyPermission(userPermissions: UserPermissions | null, permissions: string[]): boolean;
@@ -225,6 +238,59 @@ declare function hasAllPermissions(userPermissions: UserPermissions | null, perm
 declare function isRole(userPermissions: UserPermissions | null, role: Role): boolean;
 declare function isAtLeastRole(userPermissions: UserPermissions | null, role: Role): boolean;
 declare function canManageRole(userPermissions: UserPermissions | null, targetRole: string): boolean;
+
+/**
+ * Le périmètre d'un membre : ce qu'il peut filtrer, et ce qui lui est imposé.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ CETTE RÈGLE ÉTAIT ÉCRITE DEUX FOIS, ET ELLE AVAIT DÉJÀ DIVERGÉ.         │
+ * │                                                                          │
+ * │ `mobile/.../features/perimetre/filtre-perimetre.ts` et                   │
+ * │ `frontend/hooks/use-perimeter.ts` portaient les mêmes trois motifs, les  │
+ * │ mêmes libellés AU CARACTÈRE PRÈS, et le même arbre de décision - écrits  │
+ * │ séparément. Le second le reconnaissait dans son en-tête : « faute d'un   │
+ * │ module partagé ; `@vente-facile/core` serait sa place ».                 │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * ⚠ CE MODULE REND LE VERROU, IL NE DÉCIDE PAS DE CE QU'ON EN FAIT.
+ *
+ * Et c'est délibéré : sur un membre mono-dépôt, le terminal APPLIQUE son
+ * entrepôt là où le back-office ne l'envoie pas. Les deux ont raison chez eux -
+ * la base locale du terminal n'est bornée ni pour les dépenses ni pour les
+ * mouvements de caisse, alors que le serveur borne toujours. Imposer l'une des
+ * deux lectures ici casserait l'autre.
+ */
+
+/** Pourquoi un filtre d'entrepôt est fermé. `null` : il est ouvert. */
+type MotifVerrouPerimetre = 'cashier' | 'un-seul-entrepot' | 'aucun-entrepot';
+/**
+ * Ce qu'on écrit sous un filtre fermé.
+ *
+ * Un verrou muet se lit comme une panne : le marchand appuie, rien ne bouge, et
+ * rien ne lui dit que c'est normal.
+ */
+declare const LIBELLES_VERROU_PERIMETRE: Record<MotifVerrouPerimetre, string>;
+/**
+ * Le verrou qui pèse sur le filtre d'entrepôt.
+ *
+ * @param role              Le rôle du membre.
+ * @param nombreAccessibles Combien d'entrepôts VIVANTS lui sont accessibles.
+ *                          Pour un propriétaire, ce nombre n'entre pas en
+ *                          compte : son accès vient de son rôle.
+ */
+declare function verrouEntrepot(role: Role | null, nombreAccessibles: number): MotifVerrouPerimetre | null;
+/**
+ * Le choix d'entrepôt RECEVABLE, ou `null`.
+ *
+ * ⚠ UN CHOIX HORS PÉRIMÈTRE EST ÉCARTÉ, PAS ENVOYÉ. Le serveur le refuse
+ * désormais par un 400 : l'envoyer ferait crier l'écran pour une règle qu'on
+ * connaissait déjà.
+ *
+ * ⚠ ET UN VERROU N'EST PAS UN CHOIX. Cette fonction ne rend jamais l'entrepôt
+ * d'un verrou : c'est à l'appelant de décider s'il l'applique, et les deux
+ * surfaces n'y répondent pas pareil (voir l'en-tête).
+ */
+declare function choixEntrepotRecevable(choix: string | null | undefined, permis: ReadonlySet<string>, estProprietaire: boolean): string | null;
 
 /**
  * Échéances de crédit.
@@ -241,4 +307,4 @@ declare function daysLate(dueDate?: string | null): number;
 /** Libellé court : « En retard de 5 j », « Échoit dans 3 j », « Échoit aujourd'hui ». */
 declare function dueDateLabel(dueDate?: string | null): string | null;
 
-export { type CurrencyOption, type ManageableRole, type Margin, NNBSP, ROLE_HIERARCHY, ROLE_LABELS, type Role, SUPPORTED_CURRENCIES, type UserPermissions, blendedUnitCost, canManageRole, computeMargin, daysLate, dueDateLabel, formatDate, formatDateFr, formatDateTime, formatDateTimeFr, formatDecimal, formatFixedFr, formatNumber, formatNumberFr, formatPercent, formatPoints, formatPrice, formatPriceValue, formatTimeFr, formatUnitQuantity, getCurrencyByCode, getCurrencyName, getCurrencySymbol, getDefaultCurrency, hasAllPermissions, hasAnyPermission, hasPermission, isAtLeastRole, isOverdue, isRole, monthLong, monthShort, packageEquivalent, pluralizeUnit, retailEquivalent, setDefaultCurrency, weekdayLong };
+export { type CurrencyOption, LIBELLES_VERROU_PERIMETRE, type ManageableRole, type Margin, type MotifVerrouPerimetre, NNBSP, ROLE_HIERARCHY, ROLE_LABELS, type Role, SUPPORTED_CURRENCIES, type UserPermissions, blendedUnitCost, canManageRole, choixEntrepotRecevable, computeMargin, daysLate, dueDateLabel, formatDate, formatDateFr, formatDateTime, formatDateTimeFr, formatDecimal, formatFixedFr, formatNumber, formatNumberFr, formatPercent, formatPoints, formatPrice, formatPriceValue, formatTimeFr, formatUnitQuantity, getCurrencyByCode, getCurrencyName, getCurrencySymbol, getDefaultCurrency, hasAllPermissions, hasAnyPermission, hasPermission, isAtLeastRole, isOverdue, isRole, monthLong, monthShort, packageEquivalent, pluralizeUnit, retailEquivalent, setDefaultCurrency, verrouEntrepot, weekdayLong };

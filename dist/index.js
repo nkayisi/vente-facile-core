@@ -128,6 +128,25 @@ function canManageRole(userPermissions, targetRole) {
   return userPermissions.manageable_roles.some((r) => r.value === targetRole);
 }
 
+// src/perimetre.ts
+var LIBELLES_VERROU_PERIMETRE = {
+  cashier: "Vous ne voyez que vos propres donn\xE9es.",
+  "un-seul-entrepot": "Vous n'avez acc\xE8s qu'\xE0 un seul entrep\xF4t.",
+  "aucun-entrepot": "Aucun entrep\xF4t ne vous est assign\xE9. Demandez-en un au g\xE9rant."
+};
+function verrouEntrepot(role, nombreAccessibles) {
+  if (role === "cashier") return "cashier";
+  if (role === "owner" || role === null) return null;
+  if (nombreAccessibles === 0) return "aucun-entrepot";
+  if (nombreAccessibles === 1) return "un-seul-entrepot";
+  return null;
+}
+function choixEntrepotRecevable(choix, permis, estProprietaire) {
+  if (!choix) return null;
+  if (estProprietaire || permis.has(choix)) return choix;
+  return null;
+}
+
 // src/due-date.ts
 function today() {
   const now = /* @__PURE__ */ new Date();
@@ -158,6 +177,7 @@ function dueDateLabel(dueDate) {
   return `\xC9choit dans ${-late} j`;
 }
 export {
+  LIBELLES_VERROU_PERIMETRE,
   MONEY_EPS,
   NNBSP,
   ROLE_HIERARCHY,
@@ -167,6 +187,7 @@ export {
   availableSplit,
   blendedUnitCost,
   canManageRole,
+  choixEntrepotRecevable,
   computeMargin,
   createCurrencyTable,
   createMoneyHelpers,
@@ -212,6 +233,7 @@ export {
   setDefaultCurrency,
   splitPackaged,
   toBaseQuantity,
+  verrouEntrepot,
   weekdayLong
 };
 //# sourceMappingURL=index.js.map

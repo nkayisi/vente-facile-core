@@ -20,6 +20,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var index_exports = {};
 __export(index_exports, {
+  LIBELLES_VERROU_PERIMETRE: () => LIBELLES_VERROU_PERIMETRE,
   MONEY_EPS: () => MONEY_EPS,
   NNBSP: () => NNBSP,
   ROLE_HIERARCHY: () => ROLE_HIERARCHY,
@@ -29,6 +30,7 @@ __export(index_exports, {
   availableSplit: () => availableSplit,
   blendedUnitCost: () => blendedUnitCost,
   canManageRole: () => canManageRole,
+  choixEntrepotRecevable: () => choixEntrepotRecevable,
   computeMargin: () => computeMargin,
   createCurrencyTable: () => createCurrencyTable,
   createMoneyHelpers: () => createMoneyHelpers,
@@ -74,6 +76,7 @@ __export(index_exports, {
   setDefaultCurrency: () => setDefaultCurrency,
   splitPackaged: () => splitPackaged,
   toBaseQuantity: () => toBaseQuantity,
+  verrouEntrepot: () => verrouEntrepot,
   weekdayLong: () => weekdayLong
 });
 module.exports = __toCommonJS(index_exports);
@@ -499,6 +502,25 @@ function isAtLeastRole(userPermissions, role) {
 function canManageRole(userPermissions, targetRole) {
   if (!userPermissions) return false;
   return userPermissions.manageable_roles.some((r) => r.value === targetRole);
+}
+
+// src/perimetre.ts
+var LIBELLES_VERROU_PERIMETRE = {
+  cashier: "Vous ne voyez que vos propres donn\xE9es.",
+  "un-seul-entrepot": "Vous n'avez acc\xE8s qu'\xE0 un seul entrep\xF4t.",
+  "aucun-entrepot": "Aucun entrep\xF4t ne vous est assign\xE9. Demandez-en un au g\xE9rant."
+};
+function verrouEntrepot(role, nombreAccessibles) {
+  if (role === "cashier") return "cashier";
+  if (role === "owner" || role === null) return null;
+  if (nombreAccessibles === 0) return "aucun-entrepot";
+  if (nombreAccessibles === 1) return "un-seul-entrepot";
+  return null;
+}
+function choixEntrepotRecevable(choix, permis, estProprietaire) {
+  if (!choix) return null;
+  if (estProprietaire || permis.has(choix)) return choix;
+  return null;
 }
 
 // src/due-date.ts
@@ -1507,6 +1529,7 @@ function panierServable(lines2) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  LIBELLES_VERROU_PERIMETRE,
   MONEY_EPS,
   NNBSP,
   ROLE_HIERARCHY,
@@ -1516,6 +1539,7 @@ function panierServable(lines2) {
   availableSplit,
   blendedUnitCost,
   canManageRole,
+  choixEntrepotRecevable,
   computeMargin,
   createCurrencyTable,
   createMoneyHelpers,
@@ -1561,6 +1585,7 @@ function panierServable(lines2) {
   setDefaultCurrency,
   splitPackaged,
   toBaseQuantity,
+  verrouEntrepot,
   weekdayLong
 });
 //# sourceMappingURL=index.cjs.map

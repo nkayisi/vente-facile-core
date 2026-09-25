@@ -19,6 +19,7 @@ export * from "./units";
 export * from "./packaging";
 export * from "./pricing";
 export * from "./permissions";
+export * from "./perimetre";
 export * from "./due-date";
 
 export * as receipt from "./receipt/index";

@@ -33,6 +33,16 @@ export interface UserPermissions {
   manageable_roles: ManageableRole[];
   /** Toutes les permissions disponibles dans le système */
   all_permissions?: string[];
+  /**
+   * Les entrepôts assignés à ce membre. VIDE pour un propriétaire : c'est son
+   * rôle qui lui donne tout, et c'est ce qui le rend « partout ».
+   *
+   * ⚠ Ce champ vivait HORS du paquet, ajouté au type côté back-office, « parce
+   * qu'y toucher demande de publier un tag ». C'est la donnée d'entrée de la
+   * règle de périmètre : la laisser dehors garantissait que la règle y reste
+   * aussi. Facultatif, donc un serveur antérieur ne ment pas en l'omettant.
+   */
+  assigned_warehouses?: { id: string; name: string }[];
 }
 
 export function hasPermission(
