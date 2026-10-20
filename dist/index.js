@@ -1,6 +1,10 @@
 import {
+  MAX_QUANTITY,
+  MIN_QUANTITY,
   MONEY_EPS,
   NNBSP,
+  QUANTITY_DECIMALS,
+  QUANTITY_INTEGER_DIGITS,
   availableBase,
   availableSplit,
   createCurrencyTable,
@@ -20,6 +24,7 @@ import {
   formatPoints,
   formatPrice,
   formatPriceValue,
+  formatQuantity,
   formatTimeFr,
   formatUnitQuantity,
   getDefaultCurrency,
@@ -30,11 +35,12 @@ import {
   pos_exports,
   r2,
   remainingChannels,
+  roundQuantity,
   setDefaultCurrency,
   splitPackaged,
   toBaseQuantity,
   weekdayLong
-} from "./chunk-JLQFMJRB.js";
+} from "./chunk-IJZDRURH.js";
 import {
   SUPPORTED_CURRENCIES,
   getCurrencyByCode,
@@ -178,8 +184,12 @@ function dueDateLabel(dueDate) {
 }
 export {
   LIBELLES_VERROU_PERIMETRE,
+  MAX_QUANTITY,
+  MIN_QUANTITY,
   MONEY_EPS,
   NNBSP,
+  QUANTITY_DECIMALS,
+  QUANTITY_INTEGER_DIGITS,
   ROLE_HIERARCHY,
   ROLE_LABELS,
   SUPPORTED_CURRENCIES,
@@ -208,6 +218,7 @@ export {
   formatPoints,
   formatPrice,
   formatPriceValue,
+  formatQuantity,
   formatTimeFr,
   formatUnitQuantity,
   getCurrencyByCode,
@@ -230,6 +241,7 @@ export {
   receipt_exports as receipt,
   remainingChannels,
   retailEquivalent,
+  roundQuantity,
   setDefaultCurrency,
   splitPackaged,
   toBaseQuantity,

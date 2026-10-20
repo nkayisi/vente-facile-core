@@ -6,7 +6,54 @@
  * serveur enregistrera. Le serveur reste l'autorité : rien ici ne calcule une
  * quantité qui serait ensuite envoyée telle quelle, on n'envoie que la saisie.
  */
+import { formatNumberFr } from "./intl-fr";
 import { pluralizeUnit } from "./units";
+
+/**
+ * Décimales d'une QUANTITÉ de produit. Miroir strict du serveur, où tout champ
+ * de quantité est un `DecimalField(max_digits=15, decimal_places=3)` et où
+ * `PackagingService` quantise par `ZERO = Decimal('0.000')`.
+ *
+ * Trois décimales parce qu'un commerce ne vend pas que des pièces : on pèse
+ * 0,5 kg de farine et on sert 1,5 L au détail.
+ */
+export const QUANTITY_DECIMALS = 3;
+
+/**
+ * Chiffres entiers d'une quantité, soit `max_digits - decimal_places` côté
+ * serveur. Au-delà, le serveur refuse par un 400 que le comptoir ne saurait
+ * pas expliquer : autant borner la saisie là où elle se fait.
+ */
+export const QUANTITY_INTEGER_DIGITS = 12;
+
+/** La plus grande quantité que le serveur accepte d'enregistrer. */
+export const MAX_QUANTITY = 10 ** QUANTITY_INTEGER_DIGITS - 1 / 10 ** QUANTITY_DECIMALS;
+
+/** La plus petite, hors zéro : `MinValueValidator(Decimal('0.001'))`. */
+export const MIN_QUANTITY = 1 / 10 ** QUANTITY_DECIMALS;
+
+/**
+ * Quantise une quantité à trois décimales.
+ *
+ * ⚠ CE N'EST PAS DE LA COSMÉTIQUE. En flottant, `0.1 + 0.2` ne vaut pas `0.3`,
+ * et `2 * 24 + 0.3` peut sortir à `48.300000000000004`. Le serveur, lui,
+ * travaille en `Decimal` et quantise : sans ce passage, le comptoir annoncerait
+ * une quantité que le serveur enregistrerait autrement, et l'écart ne se verrait
+ * que sur un ticket déjà remis au client.
+ *
+ * L'epsilon absorbe la représentation binaire de `.5` exactement comme
+ * `currency.ts` le fait pour les montants.
+ */
+export function roundQuantity(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  const f = 10 ** QUANTITY_DECIMALS;
+  return Math.round((n + Number.EPSILON * Math.sign(n)) * f) / f;
+}
+
+/** Une quantité telle qu'elle s'écrit au comptoir : « 1 500,5 », jamais « 1500.5 ». */
+export function formatQuantity(n: number): string {
+  return formatNumberFr(n, QUANTITY_DECIMALS);
+}
 
 export interface PackagedProductLike {
   selling_mode?: string | null;
@@ -66,8 +113,10 @@ export function splitPackaged(
   const sealedBase = baseQuantity - loose;
   if (sealedBase < 0) return { packages: 0, loose: baseQuantity };
 
-  const packages = Math.floor(sealedBase / factor);
-  return { packages, loose: loose + (sealedBase - packages * factor) };
+  const packages = Math.floor(roundQuantity(sealedBase) / factor);
+  // Quantisé : `loose + (sealedBase - packages * factor)` sort volontiers à
+  // `0.30000000000000004` en flottant, et ce nombre finirait sur un ticket.
+  return { packages, loose: roundQuantity(loose + (sealedBase - packages * factor)) };
 }
 
 /** Rend une quantité lisible : « 3 cartons + 2 bouteilles ». */
@@ -76,15 +125,15 @@ export function formatPackaged(
   baseQuantity: number,
   looseQuantity = 0
 ): string {
-  if (!packaging) return String(baseQuantity);
+  if (!packaging) return formatQuantity(baseQuantity);
 
   const { packages, loose } = splitPackaged(baseQuantity, looseQuantity, packaging.factor);
   const parts: string[] = [];
   if (packages) {
-    parts.push(`${packages} ${pluralizeUnit(packaging.packageWord, packages)}`);
+    parts.push(`${formatQuantity(packages)} ${pluralizeUnit(packaging.packageWord, packages)}`);
   }
   if (loose || parts.length === 0) {
-    parts.push(`${loose} ${pluralizeUnit(packaging.retailWord, loose)}`);
+    parts.push(`${formatQuantity(loose)} ${pluralizeUnit(packaging.retailWord, loose)}`);
   }
   return parts.join(" + ");
 }
@@ -101,14 +150,14 @@ export function formatPackagedSplit(
   packages: number,
   loose: number
 ): string {
-  if (!packaging) return String(loose);
+  if (!packaging) return formatQuantity(loose);
 
   const parts: string[] = [];
   if (packages) {
-    parts.push(`${packages} ${pluralizeUnit(packaging.packageWord, packages)}`);
+    parts.push(`${formatQuantity(packages)} ${pluralizeUnit(packaging.packageWord, packages)}`);
   }
   if (loose || parts.length === 0) {
-    parts.push(`${loose} ${pluralizeUnit(packaging.retailWord, loose)}`);
+    parts.push(`${formatQuantity(loose)} ${pluralizeUnit(packaging.retailWord, loose)}`);
   }
   return parts.join(" + ");
 }
@@ -127,10 +176,12 @@ export function formatPackagedDifference(
   packageDelta: number,
   looseDelta: number
 ): string {
+  // Le signe est posé à la main : `formatQuantity` ne rend que la valeur, et un
+  // écart doit porter son « + » pour qu'un surplus ne se lise pas comme un dû.
   const signed = (value: number, word: string) =>
-    `${value > 0 ? "+" : ""}${value} ${pluralizeUnit(word, value)}`;
+    `${value > 0 ? "+" : ""}${formatQuantity(value)} ${pluralizeUnit(word, value)}`;
 
-  if (!packaging) return `${looseDelta > 0 ? "+" : ""}${looseDelta}`;
+  if (!packaging) return `${looseDelta > 0 ? "+" : ""}${formatQuantity(looseDelta)}`;
 
   const parts: string[] = [];
   if (packageDelta) parts.push(signed(packageDelta, packaging.packageWord));
@@ -146,8 +197,8 @@ export function toBaseQuantity(
   packages = 0,
   loose = 0
 ): number {
-  if (!packaging) return loose;
-  return packages * packaging.factor + loose;
+  if (!packaging) return roundQuantity(loose);
+  return roundQuantity(packages * packaging.factor + loose);
 }
 
 /** Ce que les deux canaux d'un stock offrent encore. */

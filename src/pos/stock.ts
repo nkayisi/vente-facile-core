@@ -17,7 +17,14 @@
  * Les deux se lisent « pas de nombre à opposer au caissier », ce qui est
  * précisément pourquoi ils ne peuvent pas porter le même nom.
  */
-import { remainingChannels, type ChannelAvailability } from "../packaging";
+import {
+  remainingChannels,
+  roundQuantity,
+  formatQuantity,
+  MIN_QUANTITY,
+  MAX_QUANTITY,
+  type ChannelAvailability,
+} from "../packaging";
 import {
   packagingFactorOf,
   looseQuantityOf,
@@ -160,14 +167,38 @@ export function verifierAjout(
   saisie: Saisie
 ): VerdictAjout {
   const factor = packagingFactorOf(product);
-  const packages = factor ? Math.max(0, Math.floor(saisie.packages)) : 0;
-  const loose = Math.max(0, Math.floor(saisie.loose));
-  const quantity = factor ? packages * factor + loose : loose;
+  // ┌────────────────────────────────────────────────────────────────────────┐
+  // │ UNE QUANTITÉ N'EST PAS UN ENTIER, ET NE L'A JAMAIS ÉTÉ CÔTÉ SERVEUR.   │
+  // │                                                                        │
+  // │ `Math.floor` tronquait ici les DEUX canaux, et le seuil était `< 1` :  │
+  // │ un marchand qui pèse 0,5 kg de farine se voyait répondre « Indiquez    │
+  // │ une quantité » sur une saisie parfaitement valide. Pendant ce temps le │
+  // │ serveur acceptait 0,001 depuis toujours                                │
+  // │ (`DecimalField(15, 3)` + `MinValueValidator(0.001)`), si bien que le   │
+  // │ comptoir était plus strict que lui, sans raison.                       │
+  // │                                                                        │
+  // │ On quantise au lieu de tronquer : le serveur travaille en `Decimal` et │
+  // │ quantise aussi, et une divergence d'arrondi ne se verrait que sur un   │
+  // │ ticket déjà remis au client.                                           │
+  // └────────────────────────────────────────────────────────────────────────┘
+  const packages = factor ? Math.max(0, roundQuantity(saisie.packages)) : 0;
+  const loose = Math.max(0, roundQuantity(saisie.loose));
+  const quantity = factor ? roundQuantity(packages * factor + loose) : loose;
   const nom = product.name || "Cet article";
   const base = { quantity, packageQuantity: packages };
 
-  if (quantity < 1) {
+  if (quantity < MIN_QUANTITY) {
     return { ...base, ok: false, raison: "Indiquez une quantité." };
+  }
+
+  // La borne haute est celle du serveur. Sans elle, le refus arrive en 400 sur
+  // une vente déjà annoncée au client, et son message parle de `max_digits`.
+  if (quantity > MAX_QUANTITY) {
+    return {
+      ...base,
+      ok: false,
+      raison: `Quantité trop grande : au plus ${formatQuantity(MAX_QUANTITY)}.`,
+    };
   }
 
   const dejaAuPanier = inCart(lines, product.id);
@@ -179,8 +210,8 @@ export function verifierAjout(
       ok: false,
       raison:
         dejaAuPanier > 0
-          ? `Stock insuffisant pour ${nom} : ${total} en stock, ${dejaAuPanier} déjà au panier.`
-          : `Stock insuffisant pour ${nom} : ${total} en stock.`,
+          ? `Stock insuffisant pour ${nom} : ${formatQuantity(total)} en stock, ${formatQuantity(dejaAuPanier)} déjà au panier.`
+          : `Stock insuffisant pour ${nom} : ${formatQuantity(total)} en stock.`,
     };
   }
 
@@ -207,7 +238,7 @@ export function verifierAjout(
       return {
         ...base,
         ok: false,
-        raison: `Il ne reste que ${scelles} ${mot}${
+        raison: `Il ne reste que ${formatQuantity(scelles)} ${mot}${
           scelles > 1 ? "s" : ""
         } en scellé pour ${nom}.`,
       };

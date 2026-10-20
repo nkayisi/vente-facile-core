@@ -21,8 +21,12 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 var index_exports = {};
 __export(index_exports, {
   LIBELLES_VERROU_PERIMETRE: () => LIBELLES_VERROU_PERIMETRE,
+  MAX_QUANTITY: () => MAX_QUANTITY,
+  MIN_QUANTITY: () => MIN_QUANTITY,
   MONEY_EPS: () => MONEY_EPS,
   NNBSP: () => NNBSP,
+  QUANTITY_DECIMALS: () => QUANTITY_DECIMALS,
+  QUANTITY_INTEGER_DIGITS: () => QUANTITY_INTEGER_DIGITS,
   ROLE_HIERARCHY: () => ROLE_HIERARCHY,
   ROLE_LABELS: () => ROLE_LABELS,
   SUPPORTED_CURRENCIES: () => SUPPORTED_CURRENCIES,
@@ -51,6 +55,7 @@ __export(index_exports, {
   formatPoints: () => formatPoints,
   formatPrice: () => formatPrice,
   formatPriceValue: () => formatPriceValue,
+  formatQuantity: () => formatQuantity,
   formatTimeFr: () => formatTimeFr,
   formatUnitQuantity: () => formatUnitQuantity,
   getCurrencyByCode: () => getCurrencyByCode,
@@ -73,6 +78,7 @@ __export(index_exports, {
   receipt: () => receipt_exports,
   remainingChannels: () => remainingChannels,
   retailEquivalent: () => retailEquivalent,
+  roundQuantity: () => roundQuantity,
   setDefaultCurrency: () => setDefaultCurrency,
   splitPackaged: () => splitPackaged,
   toBaseQuantity: () => toBaseQuantity,
@@ -332,6 +338,18 @@ function formatUnitQuantity(count, word) {
 }
 
 // src/packaging.ts
+var QUANTITY_DECIMALS = 3;
+var QUANTITY_INTEGER_DIGITS = 12;
+var MAX_QUANTITY = 10 ** QUANTITY_INTEGER_DIGITS - 1 / 10 ** QUANTITY_DECIMALS;
+var MIN_QUANTITY = 1 / 10 ** QUANTITY_DECIMALS;
+function roundQuantity(n) {
+  if (!Number.isFinite(n)) return 0;
+  const f = 10 ** QUANTITY_DECIMALS;
+  return Math.round((n + Number.EPSILON * Math.sign(n)) * f) / f;
+}
+function formatQuantity(n) {
+  return formatNumberFr(n, QUANTITY_DECIMALS);
+}
 function getPackaging(product) {
   if (!product) return null;
   const mode = product.selling_mode ?? "retail_only";
@@ -350,35 +368,35 @@ function splitPackaged(baseQuantity, looseQuantity, factor) {
   const loose = Math.max(0, Math.min(looseQuantity, Math.max(baseQuantity, 0)));
   const sealedBase = baseQuantity - loose;
   if (sealedBase < 0) return { packages: 0, loose: baseQuantity };
-  const packages = Math.floor(sealedBase / factor);
-  return { packages, loose: loose + (sealedBase - packages * factor) };
+  const packages = Math.floor(roundQuantity(sealedBase) / factor);
+  return { packages, loose: roundQuantity(loose + (sealedBase - packages * factor)) };
 }
 function formatPackaged(packaging, baseQuantity, looseQuantity = 0) {
-  if (!packaging) return String(baseQuantity);
+  if (!packaging) return formatQuantity(baseQuantity);
   const { packages, loose } = splitPackaged(baseQuantity, looseQuantity, packaging.factor);
   const parts = [];
   if (packages) {
-    parts.push(`${packages} ${pluralizeUnit(packaging.packageWord, packages)}`);
+    parts.push(`${formatQuantity(packages)} ${pluralizeUnit(packaging.packageWord, packages)}`);
   }
   if (loose || parts.length === 0) {
-    parts.push(`${loose} ${pluralizeUnit(packaging.retailWord, loose)}`);
+    parts.push(`${formatQuantity(loose)} ${pluralizeUnit(packaging.retailWord, loose)}`);
   }
   return parts.join(" + ");
 }
 function formatPackagedSplit(packaging, packages, loose) {
-  if (!packaging) return String(loose);
+  if (!packaging) return formatQuantity(loose);
   const parts = [];
   if (packages) {
-    parts.push(`${packages} ${pluralizeUnit(packaging.packageWord, packages)}`);
+    parts.push(`${formatQuantity(packages)} ${pluralizeUnit(packaging.packageWord, packages)}`);
   }
   if (loose || parts.length === 0) {
-    parts.push(`${loose} ${pluralizeUnit(packaging.retailWord, loose)}`);
+    parts.push(`${formatQuantity(loose)} ${pluralizeUnit(packaging.retailWord, loose)}`);
   }
   return parts.join(" + ");
 }
 function formatPackagedDifference(packaging, packageDelta, looseDelta) {
-  const signed = (value, word) => `${value > 0 ? "+" : ""}${value} ${pluralizeUnit(word, value)}`;
-  if (!packaging) return `${looseDelta > 0 ? "+" : ""}${looseDelta}`;
+  const signed = (value, word) => `${value > 0 ? "+" : ""}${formatQuantity(value)} ${pluralizeUnit(word, value)}`;
+  if (!packaging) return `${looseDelta > 0 ? "+" : ""}${formatQuantity(looseDelta)}`;
   const parts = [];
   if (packageDelta) parts.push(signed(packageDelta, packaging.packageWord));
   if (looseDelta || parts.length === 0) {
@@ -387,8 +405,8 @@ function formatPackagedDifference(packaging, packageDelta, looseDelta) {
   return parts.join(", ");
 }
 function toBaseQuantity(packaging, packages = 0, loose = 0) {
-  if (!packaging) return loose;
-  return packages * packaging.factor + loose;
+  if (!packaging) return roundQuantity(loose);
+  return roundQuantity(packages * packaging.factor + loose);
 }
 function remainingChannels(stock, used, factor) {
   if (stock.sealed === null || stock.loose === null || !factor || factor < 2) {
@@ -571,7 +589,7 @@ __export(receipt_exports, {
   formatBare: () => formatBare,
   formatMoney: () => formatMoney,
   formatPoints: () => formatPoints2,
-  formatQuantity: () => formatQuantity,
+  formatQuantity: () => formatQuantity2,
   leading: () => leading,
   leadingOf: () => leadingOf,
   orgHeaderBlocks: () => orgHeaderBlocks,
@@ -654,7 +672,7 @@ function formatPoints2(points) {
   const rounded = Math.round(n * 100) / 100;
   return Number.isInteger(rounded) ? String(rounded) : formatAmount(rounded, 2);
 }
-function formatQuantity(quantity) {
+function formatQuantity2(quantity) {
   const n = typeof quantity === "string" ? parseFloat(quantity) : quantity;
   const safe = Number.isFinite(n) ? n : 0;
   const rounded = Math.round(safe * 1e3) / 1e3;
@@ -883,7 +901,7 @@ function buildSaleReceipt(data) {
   const discounts = splitDiscount(data);
   const items = data.items.map((item) => ({
     name: item.name,
-    quantity: formatQuantity(item.quantity),
+    quantity: formatQuantity2(item.quantity),
     unitPrice: bare(item.unitPrice),
     total: bare(item.total),
     quantityLabel: item.quantityLabel,
@@ -1474,13 +1492,20 @@ function addableLoose(product, lines2, options = {}) {
 }
 function verifierAjout(product, lines2, saisie) {
   const factor = packagingFactorOf(product);
-  const packages = factor ? Math.max(0, Math.floor(saisie.packages)) : 0;
-  const loose = Math.max(0, Math.floor(saisie.loose));
-  const quantity = factor ? packages * factor + loose : loose;
+  const packages = factor ? Math.max(0, roundQuantity(saisie.packages)) : 0;
+  const loose = Math.max(0, roundQuantity(saisie.loose));
+  const quantity = factor ? roundQuantity(packages * factor + loose) : loose;
   const nom = product.name || "Cet article";
   const base = { quantity, packageQuantity: packages };
-  if (quantity < 1) {
+  if (quantity < MIN_QUANTITY) {
     return { ...base, ok: false, raison: "Indiquez une quantit\xE9." };
+  }
+  if (quantity > MAX_QUANTITY) {
+    return {
+      ...base,
+      ok: false,
+      raison: `Quantit\xE9 trop grande : au plus ${formatQuantity(MAX_QUANTITY)}.`
+    };
   }
   const dejaAuPanier = inCart(lines2, product.id);
   const borne = addableBase(product, lines2);
@@ -1489,7 +1514,7 @@ function verifierAjout(product, lines2, saisie) {
     return {
       ...base,
       ok: false,
-      raison: dejaAuPanier > 0 ? `Stock insuffisant pour ${nom} : ${total} en stock, ${dejaAuPanier} d\xE9j\xE0 au panier.` : `Stock insuffisant pour ${nom} : ${total} en stock.`
+      raison: dejaAuPanier > 0 ? `Stock insuffisant pour ${nom} : ${formatQuantity(total)} en stock, ${formatQuantity(dejaAuPanier)} d\xE9j\xE0 au panier.` : `Stock insuffisant pour ${nom} : ${formatQuantity(total)} en stock.`
     };
   }
   if (packages > 0) {
@@ -1499,7 +1524,7 @@ function verifierAjout(product, lines2, saisie) {
       return {
         ...base,
         ok: false,
-        raison: `Il ne reste que ${scelles} ${mot}${scelles > 1 ? "s" : ""} en scell\xE9 pour ${nom}.`
+        raison: `Il ne reste que ${formatQuantity(scelles)} ${mot}${scelles > 1 ? "s" : ""} en scell\xE9 pour ${nom}.`
       };
     }
   }
@@ -1530,8 +1555,12 @@ function panierServable(lines2) {
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   LIBELLES_VERROU_PERIMETRE,
+  MAX_QUANTITY,
+  MIN_QUANTITY,
   MONEY_EPS,
   NNBSP,
+  QUANTITY_DECIMALS,
+  QUANTITY_INTEGER_DIGITS,
   ROLE_HIERARCHY,
   ROLE_LABELS,
   SUPPORTED_CURRENCIES,
@@ -1560,6 +1589,7 @@ function panierServable(lines2) {
   formatPoints,
   formatPrice,
   formatPriceValue,
+  formatQuantity,
   formatTimeFr,
   formatUnitQuantity,
   getCurrencyByCode,
@@ -1582,6 +1612,7 @@ function panierServable(lines2) {
   receipt,
   remainingChannels,
   retailEquivalent,
+  roundQuantity,
   setDefaultCurrency,
   splitPackaged,
   toBaseQuantity,

@@ -109,6 +109,18 @@ function createCurrencyTable(currencies, fallback) {
 }
 
 // src/packaging.ts
+var QUANTITY_DECIMALS = 3;
+var QUANTITY_INTEGER_DIGITS = 12;
+var MAX_QUANTITY = 10 ** QUANTITY_INTEGER_DIGITS - 1 / 10 ** QUANTITY_DECIMALS;
+var MIN_QUANTITY = 1 / 10 ** QUANTITY_DECIMALS;
+function roundQuantity(n) {
+  if (!Number.isFinite(n)) return 0;
+  const f = 10 ** QUANTITY_DECIMALS;
+  return Math.round((n + Number.EPSILON * Math.sign(n)) * f) / f;
+}
+function formatQuantity(n) {
+  return formatNumberFr(n, QUANTITY_DECIMALS);
+}
 function getPackaging(product) {
   if (!product) return null;
   const mode = product.selling_mode ?? "retail_only";
@@ -431,13 +443,20 @@ function addableLoose(product, lines, options = {}) {
 }
 function verifierAjout(product, lines, saisie) {
   const factor = packagingFactorOf(product);
-  const packages = factor ? Math.max(0, Math.floor(saisie.packages)) : 0;
-  const loose = Math.max(0, Math.floor(saisie.loose));
-  const quantity = factor ? packages * factor + loose : loose;
+  const packages = factor ? Math.max(0, roundQuantity(saisie.packages)) : 0;
+  const loose = Math.max(0, roundQuantity(saisie.loose));
+  const quantity = factor ? roundQuantity(packages * factor + loose) : loose;
   const nom = product.name || "Cet article";
   const base = { quantity, packageQuantity: packages };
-  if (quantity < 1) {
+  if (quantity < MIN_QUANTITY) {
     return { ...base, ok: false, raison: "Indiquez une quantit\xE9." };
+  }
+  if (quantity > MAX_QUANTITY) {
+    return {
+      ...base,
+      ok: false,
+      raison: `Quantit\xE9 trop grande : au plus ${formatQuantity(MAX_QUANTITY)}.`
+    };
   }
   const dejaAuPanier = inCart(lines, product.id);
   const borne = addableBase(product, lines);
@@ -446,7 +465,7 @@ function verifierAjout(product, lines, saisie) {
     return {
       ...base,
       ok: false,
-      raison: dejaAuPanier > 0 ? `Stock insuffisant pour ${nom} : ${total} en stock, ${dejaAuPanier} d\xE9j\xE0 au panier.` : `Stock insuffisant pour ${nom} : ${total} en stock.`
+      raison: dejaAuPanier > 0 ? `Stock insuffisant pour ${nom} : ${formatQuantity(total)} en stock, ${formatQuantity(dejaAuPanier)} d\xE9j\xE0 au panier.` : `Stock insuffisant pour ${nom} : ${formatQuantity(total)} en stock.`
     };
   }
   if (packages > 0) {
@@ -456,7 +475,7 @@ function verifierAjout(product, lines, saisie) {
       return {
         ...base,
         ok: false,
-        raison: `Il ne reste que ${scelles} ${mot}${scelles > 1 ? "s" : ""} en scell\xE9 pour ${nom}.`
+        raison: `Il ne reste que ${formatQuantity(scelles)} ${mot}${scelles > 1 ? "s" : ""} en scell\xE9 pour ${nom}.`
       };
     }
   }

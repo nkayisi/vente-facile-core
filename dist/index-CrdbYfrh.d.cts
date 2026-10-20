@@ -119,6 +119,40 @@ interface MoneyHelpers {
  */
 declare function createMoneyHelpers(currencies: OrganizationCurrency[], fallback: CurrencyInfo): MoneyHelpers;
 
+/**
+ * Décimales d'une QUANTITÉ de produit. Miroir strict du serveur, où tout champ
+ * de quantité est un `DecimalField(max_digits=15, decimal_places=3)` et où
+ * `PackagingService` quantise par `ZERO = Decimal('0.000')`.
+ *
+ * Trois décimales parce qu'un commerce ne vend pas que des pièces : on pèse
+ * 0,5 kg de farine et on sert 1,5 L au détail.
+ */
+declare const QUANTITY_DECIMALS = 3;
+/**
+ * Chiffres entiers d'une quantité, soit `max_digits - decimal_places` côté
+ * serveur. Au-delà, le serveur refuse par un 400 que le comptoir ne saurait
+ * pas expliquer : autant borner la saisie là où elle se fait.
+ */
+declare const QUANTITY_INTEGER_DIGITS = 12;
+/** La plus grande quantité que le serveur accepte d'enregistrer. */
+declare const MAX_QUANTITY: number;
+/** La plus petite, hors zéro : `MinValueValidator(Decimal('0.001'))`. */
+declare const MIN_QUANTITY: number;
+/**
+ * Quantise une quantité à trois décimales.
+ *
+ * ⚠ CE N'EST PAS DE LA COSMÉTIQUE. En flottant, `0.1 + 0.2` ne vaut pas `0.3`,
+ * et `2 * 24 + 0.3` peut sortir à `48.300000000000004`. Le serveur, lui,
+ * travaille en `Decimal` et quantise : sans ce passage, le comptoir annoncerait
+ * une quantité que le serveur enregistrerait autrement, et l'écart ne se verrait
+ * que sur un ticket déjà remis au client.
+ *
+ * L'epsilon absorbe la représentation binaire de `.5` exactement comme
+ * `currency.ts` le fait pour les montants.
+ */
+declare function roundQuantity(n: number): number;
+/** Une quantité telle qu'elle s'écrit au comptoir : « 1 500,5 », jamais « 1500.5 ». */
+declare function formatQuantity(n: number): string;
 interface PackagedProductLike {
     selling_mode?: string | null;
     units_per_package?: number | null;
@@ -706,4 +740,4 @@ declare namespace index {
   export { type index_BasketInput as BasketInput, type index_BasketLine as BasketLine, type index_BasketProduct as BasketProduct, type index_BasketTotals as BasketTotals, type index_CreditCustomerLike as CreditCustomerLike, type index_CreditVerdict as CreditVerdict, type index_CurrencyFallback as CurrencyFallback, type index_CurrencyTable as CurrencyTable, type index_LigneStockee as LigneStockee, type index_LoyaltyProgramLike as LoyaltyProgramLike, index_MONEY_EPS as MONEY_EPS, type index_OrganizationCurrencyLike as OrganizationCurrencyLike, type index_Rupture as Rupture, type index_Saisie as Saisie, type index_SaleCurrencyInput as SaleCurrencyInput, type index_SaleCurrencyLine as SaleCurrencyLine, type index_SaleCurrencyTotals as SaleCurrencyTotals, type index_SaleItemPayload as SaleItemPayload, type index_SalePayload as SalePayload, type index_SalePayloadInput as SalePayloadInput, type index_SalePaymentPayload as SalePaymentPayload, type index_SaleTender as SaleTender, type index_StockedProductLike as StockedProductLike, type index_TenderLike as TenderLike, type index_VerdictAjout as VerdictAjout, index_addableBase as addableBase, index_addableChannels as addableChannels, index_addableLoose as addableLoose, index_addableSealed as addableSealed, index_basketTotals as basketTotals, index_buildSalePayload as buildSalePayload, index_createCurrencyTable as createCurrencyTable, index_evaluateCredit as evaluateCredit, index_inCart as inCart, index_lignesEnRupture as lignesEnRupture, index_lineGross as lineGross, index_looseQuantityOf as looseQuantityOf, index_loyaltyDiscount as loyaltyDiscount, index_maxGlobalDiscount as maxGlobalDiscount, index_maxLoyaltyAmount as maxLoyaltyAmount, index_maxUsablePoints as maxUsablePoints, index_minPointsToRedeem as minPointsToRedeem, index_packagingFactorOf as packagingFactorOf, index_panierServable as panierServable, index_pointValue as pointValue, index_r2 as r2, index_roundPoints as roundPoints, index_saleCurrencyTotals as saleCurrencyTotals, index_tendersIn as tendersIn, index_totalInSaleCurrency as totalInSaleCurrency, index_verifierAjout as verifierAjout };
 }
 
-export { lignesEnRupture as $, type SaleCurrencyInput as A, type BasketInput as B, type ChannelAvailability as C, type SaleCurrencyLine as D, type SaleCurrencyTotals as E, type SaleItemPayload as F, type SalePayload as G, type SalePayloadInput as H, type SalePaymentPayload as I, type SaleTender as J, type StockedProductLike as K, type LigneStockee as L, MONEY_EPS as M, addableBase as N, type OrganizationCurrency as O, type PackagedProductLike as P, addableChannels as Q, type Rupture as R, type StockCounters as S, type TenderLike as T, addableLoose as U, type VerdictAjout as V, addableSealed as W, basketTotals as X, buildSalePayload as Y, evaluateCredit as Z, inCart as _, type CurrencyFallback as a, lineGross as a0, looseQuantityOf as a1, loyaltyDiscount as a2, maxGlobalDiscount as a3, maxLoyaltyAmount as a4, maxUsablePoints as a5, minPointsToRedeem as a6, packagingFactorOf as a7, panierServable as a8, pointValue as a9, roundPoints as aa, saleCurrencyTotals as ab, tendersIn as ac, totalInSaleCurrency as ad, verifierAjout as ae, type CurrencyInfo as b, type CurrencyTable as c, type MoneyHelpers as d, type OrganizationCurrencyLike as e, type Packaging as f, availableBase as g, availableSplit as h, createCurrencyTable as i, createMoneyHelpers as j, formatPackaged as k, formatPackagedDifference as l, formatPackagedSplit as m, getPackaging as n, index as o, remainingChannels as p, type BasketLine as q, r2 as r, splitPackaged as s, toBaseQuantity as t, type BasketProduct as u, type BasketTotals as v, type CreditCustomerLike as w, type CreditVerdict as x, type LoyaltyProgramLike as y, type Saisie as z };
+export { addableLoose as $, type BasketTotals as A, type BasketInput as B, type ChannelAvailability as C, type CreditCustomerLike as D, type CreditVerdict as E, type LoyaltyProgramLike as F, type Saisie as G, type SaleCurrencyInput as H, type SaleCurrencyLine as I, type SaleCurrencyTotals as J, type SaleItemPayload as K, type LigneStockee as L, MAX_QUANTITY as M, type SalePayload as N, type OrganizationCurrency as O, type PackagedProductLike as P, QUANTITY_DECIMALS as Q, type Rupture as R, type StockCounters as S, type SalePayloadInput as T, type SalePaymentPayload as U, type SaleTender as V, type StockedProductLike as W, type TenderLike as X, type VerdictAjout as Y, addableBase as Z, addableChannels as _, type CurrencyFallback as a, addableSealed as a0, basketTotals as a1, buildSalePayload as a2, evaluateCredit as a3, inCart as a4, lignesEnRupture as a5, lineGross as a6, looseQuantityOf as a7, loyaltyDiscount as a8, maxGlobalDiscount as a9, maxLoyaltyAmount as aa, maxUsablePoints as ab, minPointsToRedeem as ac, packagingFactorOf as ad, panierServable as ae, pointValue as af, roundPoints as ag, saleCurrencyTotals as ah, tendersIn as ai, totalInSaleCurrency as aj, verifierAjout as ak, type CurrencyInfo as b, type CurrencyTable as c, MIN_QUANTITY as d, MONEY_EPS as e, type MoneyHelpers as f, type OrganizationCurrencyLike as g, type Packaging as h, QUANTITY_INTEGER_DIGITS as i, availableBase as j, availableSplit as k, createCurrencyTable as l, createMoneyHelpers as m, formatPackaged as n, formatPackagedDifference as o, formatPackagedSplit as p, formatQuantity as q, getPackaging as r, index as s, r2 as t, remainingChannels as u, roundQuantity as v, splitPackaged as w, toBaseQuantity as x, type BasketLine as y, type BasketProduct as z };

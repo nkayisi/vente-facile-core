@@ -135,3 +135,88 @@ describe("Bornes de stock", () => {
     expect(addableSealed(decouvert, [])).toBeNull();
   });
 });
+
+/**
+ * Les quantités fractionnaires, et la borne haute.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ LE COMPTOIR ÉTAIT PLUS STRICT QUE LE SERVEUR, SANS RAISON.               │
+ * │                                                                          │
+ * │ `verifierAjout` tronquait les deux canaux par `Math.floor` et refusait   │
+ * │ en dessous de 1, alors que le serveur accepte 0,001 depuis toujours      │
+ * │ (`SaleItem.quantity` : `DecimalField(15, 3)` +                           │
+ * │ `MinValueValidator(0.001)`). Un marchand qui pèse 0,5 kg de farine se    │
+ * │ voyait répondre « Indiquez une quantité ».                               │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+describe("Quantités fractionnaires", () => {
+  const farine: StockedProductLike = {
+    id: "p-farine",
+    name: "Farine",
+    selling_mode: "retail_only",
+    units_per_package: null,
+    unit_name: "kg",
+    track_inventory: true,
+    allow_negative_stock: false,
+    stock_quantity: 25,
+    stock_packages: null,
+    stock_loose: null,
+  };
+
+  it("accepte un demi-kilo", () => {
+    const v = verifierAjout(farine, [], { packages: 0, loose: 0.5 });
+    expect(v.ok).toBe(true);
+    expect(v.quantity).toBe(0.5);
+    expect(v.raison).toBeNull();
+  });
+
+  it("accepte le plus petit pas que le serveur enregistre", () => {
+    expect(verifierAjout(farine, [], { packages: 0, loose: 0.001 }).ok).toBe(true);
+  });
+
+  it("refuse en dessous de ce pas, zéro compris", () => {
+    for (const loose of [0, 0.0004]) {
+      const v = verifierAjout(farine, [], { packages: 0, loose });
+      expect(v.ok).toBe(false);
+      expect(v.raison).toBe("Indiquez une quantité.");
+    }
+  });
+
+  it("ne tronque plus : 2,5 reste 2,5", () => {
+    expect(verifierAjout(farine, [], { packages: 0, loose: 2.5 }).quantity).toBe(2.5);
+  });
+
+  /**
+   * ⚠ Le défaut que la quantisation existe pour fermer. Sans elle,
+   * `2 * 12 + 0.3` sort à `24.299999999999997` et ce nombre finit sur un
+   * ticket - le serveur, lui, aurait enregistré `24.300`.
+   */
+  it("quantise le total, au lieu de laisser filer le flottant", () => {
+    const v = verifierAjout(casier, [], { packages: 2, loose: 0.3 });
+    expect(v.quantity).toBe(24.3);
+  });
+
+  it("compte un canal fractionnaire dans le total", () => {
+    const v = verifierAjout(casier, [], { packages: 2.5, loose: 0 });
+    expect(v.quantity).toBe(30);
+    expect(v.packageQuantity).toBe(2.5);
+  });
+
+  it("borne par le haut, là où le serveur borne", () => {
+    const v = verifierAjout(farine, [], { packages: 0, loose: 1e13 });
+    expect(v.ok).toBe(false);
+    expect(v.raison).toMatch(/trop grande/);
+  });
+
+  /**
+   * Le message fait partie de la règle : un nombre à point décimal anglais sous
+   * les yeux d'un caissier congolais se lit mal, et le dépôt proscrit `Intl`.
+   */
+  it("écrit les quantités à la française dans ses refus", () => {
+    const petit: StockedProductLike = { ...farine, stock_quantity: 0.5 };
+    const v = verifierAjout(petit, [], { packages: 0, loose: 2 });
+    expect(v.ok).toBe(false);
+    expect(v.raison).toContain("0,5");
+    expect(v.raison).not.toContain("0.5");
+  });
+});
