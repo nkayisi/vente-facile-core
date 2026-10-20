@@ -25,8 +25,9 @@ import {
   saleCurrencyTotals,
   tendersIn,
   totalInSaleCurrency,
+  totauxParDevise,
   verifierAjout
-} from "../chunk-IJZDRURH.js";
+} from "../chunk-6FOPZG2J.js";
 import "../chunk-PZ5AY32C.js";
 export {
   MONEY_EPS,
@@ -55,6 +56,7 @@ export {
   saleCurrencyTotals,
   tendersIn,
   totalInSaleCurrency,
+  totauxParDevise,
   verifierAjout
 };
 //# sourceMappingURL=index.js.map

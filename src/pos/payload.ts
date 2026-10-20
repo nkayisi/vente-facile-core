@@ -53,6 +53,8 @@ export interface SaleItemPayload {
   package_quantity?: number;
   loose_quantity?: number;
   package_unit_price?: number;
+  /** Devise d'annonce de la ligne. Absente : celle de la facture. */
+  price_currency?: string;
 }
 
 export interface SalePaymentPayload {
@@ -95,10 +97,19 @@ export function buildSalePayload(input: SalePayloadInput): SalePayload {
   const cur = invoiceCurrency;
 
   const items: SaleItemPayload[] = lines.map((line) => {
+    // La devise dans laquelle CETTE ligne a été annoncée au client. Absente :
+    // elle suit la facture, ce que toute vente a fait jusqu'ici.
+    //
+    // ⚠ `unit_price` PART DANS CETTE DEVISE, pas dans celle de la facture :
+    // c'est le prix que le client a entendu, et c'est celui que le serveur
+    // enregistre sur la ligne. Le total de la facture, lui, est recomposé par
+    // le serveur au taux figé de chaque ligne.
+    const ligneCur = line.priceCurrency?.trim() || cur;
     const base: SaleItemPayload = {
       product: line.product.id,
-      unit_price: currencies.convertMoney(line.unit_price, primary, cur),
+      unit_price: currencies.convertMoney(line.unit_price, primary, ligneCur),
       discount_percentage: r2(line.discount_percentage),
+      ...(ligneCur === cur ? {} : { price_currency: ligneCur }),
     };
     // Produit vendu en gros : on envoie la saisie du caissier (contenants et
     // unités) plutôt qu'un total calculé ici. Le serveur fait la conversion et
@@ -110,7 +121,7 @@ export function buildSalePayload(input: SalePayloadInput): SalePayload {
         package_quantity: line.packageQuantity,
         loose_quantity: looseQuantityOf(line),
         package_unit_price: currencies.convertMoney(
-          num(line.product.wholesale_price), primary, cur
+          num(line.product.wholesale_price), primary, ligneCur
         ),
       };
     }

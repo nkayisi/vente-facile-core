@@ -46,6 +46,7 @@ __export(pos_exports, {
   saleCurrencyTotals: () => saleCurrencyTotals,
   tendersIn: () => tendersIn,
   totalInSaleCurrency: () => totalInSaleCurrency,
+  totauxParDevise: () => totauxParDevise,
   verifierAjout: () => verifierAjout
 });
 module.exports = __toCommonJS(pos_exports);
@@ -252,6 +253,44 @@ function saleCurrencyTotals({
     lines: perLine
   };
 }
+function totauxParDevise({
+  lines,
+  currencies,
+  invoiceCurrency
+}) {
+  const facture = invoiceCurrency || currencies.primary;
+  const primary = currencies.primary;
+  const par = /* @__PURE__ */ new Map();
+  for (const line of lines) {
+    const cur = line.priceCurrency?.trim() || facture;
+    const unit = currencies.convertMoney(line.unit_price, primary, cur);
+    const packageUnitPrice = currencies.convertMoney(
+      num(line.product.wholesale_price),
+      primary,
+      cur
+    );
+    const factor = packagingFactorOf(line.product);
+    const gross = factor && line.packageQuantity > 0 ? currencies.round(
+      line.packageQuantity * packageUnitPrice + looseQuantityOf(line) * unit,
+      cur
+    ) : currencies.round(line.quantity * unit, cur);
+    const discount = currencies.round(gross * line.discount_percentage / 100, cur);
+    const taxe = line.product.is_taxable ? currencies.round((gross - discount) * num(line.product.tax_rate) / 100, cur) : 0;
+    const acc = par.get(cur) ?? {
+      currency: cur,
+      subtotal: 0,
+      itemDiscount: 0,
+      tax: 0,
+      total: 0
+    };
+    acc.subtotal += gross;
+    acc.itemDiscount += discount;
+    acc.tax += taxe;
+    acc.total = currencies.round(acc.subtotal - acc.itemDiscount + acc.tax, cur);
+    par.set(cur, acc);
+  }
+  return [...par.values()].sort((a, b) => a.currency.localeCompare(b.currency));
+}
 function totalInSaleCurrency(input) {
   return saleCurrencyTotals(input).total;
 }
@@ -351,10 +390,12 @@ function buildSalePayload(input) {
   const primary = currencies.primary;
   const cur = invoiceCurrency;
   const items = lines.map((line) => {
+    const ligneCur = line.priceCurrency?.trim() || cur;
     const base = {
       product: line.product.id,
-      unit_price: currencies.convertMoney(line.unit_price, primary, cur),
-      discount_percentage: r2(line.discount_percentage)
+      unit_price: currencies.convertMoney(line.unit_price, primary, ligneCur),
+      discount_percentage: r2(line.discount_percentage),
+      ...ligneCur === cur ? {} : { price_currency: ligneCur }
     };
     if (packagingFactorOf(line.product)) {
       return {
@@ -364,7 +405,7 @@ function buildSalePayload(input) {
         package_unit_price: currencies.convertMoney(
           num3(line.product.wholesale_price),
           primary,
-          cur
+          ligneCur
         )
       };
     }
@@ -531,6 +572,7 @@ function panierServable(lines) {
   saleCurrencyTotals,
   tendersIn,
   totalInSaleCurrency,
+  totauxParDevise,
   verifierAjout
 });
 //# sourceMappingURL=index.cjs.map

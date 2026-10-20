@@ -10,7 +10,10 @@ import {
   addableChannels,
   addableSealed,
   verifierAjout,
+  totauxParDevise,
+  createCurrencyTable,
   type BasketLine,
+  type BasketProduct,
   type StockedProductLike,
 } from "../src/pos/index";
 
@@ -218,5 +221,92 @@ describe("Quantités fractionnaires", () => {
     expect(v.ok).toBe(false);
     expect(v.raison).toContain("0,5");
     expect(v.raison).not.toContain("0.5");
+  });
+});
+
+/**
+ * La devise d'annonce par ligne.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ LES SOUS-TOTAUX NE S'ADDITIONNENT PAS, ET C'EST LEUR OBJET.              │
+ * │                                                                          │
+ * │ Un marchand annonce la farine en francs et le savon importé en dollars.  │
+ * │ Les deux chiffres sont vrais ; leur somme n'existe dans aucune monnaie.  │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+describe("Ventilation du panier par devise", () => {
+  const devises = createCurrencyTable(
+    [
+      { currency_code: "CDF", exchange_rate: 1, is_primary: true },
+      { currency_code: "USD", exchange_rate: 2800 },
+    ],
+    "CDF"
+  );
+
+  const article = (id: string, prix: number): StockedProductLike & BasketProduct =>
+    ({
+      id,
+      name: id,
+      selling_mode: "retail_only",
+      units_per_package: null,
+      track_inventory: true,
+      stock_quantity: 100,
+      stock_packages: null,
+      stock_loose: null,
+      is_taxable: false,
+      tax_rate: 0,
+      selling_price: prix,
+    }) as StockedProductLike & BasketProduct;
+
+  const ligneDe = (p: string, q: number, prix: number, cur?: string): BasketLine => ({
+    product: article(p, prix),
+    quantity: q,
+    packageQuantity: 0,
+    unit_price: prix,
+    discount_percentage: 0,
+    ...(cur ? { priceCurrency: cur } : {}),
+  });
+
+  it("rend une seule ligne quand tout partage la devise de facture", () => {
+    const r = totauxParDevise({
+      lines: [ligneDe("farine", 2, 1500)],
+      currencies: devises,
+      invoiceCurrency: "CDF",
+    });
+    expect(r).toHaveLength(1);
+    expect(r[0]).toMatchObject({ currency: "CDF", total: 3000 });
+  });
+
+  it("sépare les deux devises, sans jamais les sommer", () => {
+    const r = totauxParDevise({
+      lines: [ligneDe("farine", 2, 1500), ligneDe("savon", 3, 5600, "USD")],
+      currencies: devises,
+      invoiceCurrency: "CDF",
+    });
+    expect(r.map((x) => x.currency)).toEqual(["CDF", "USD"]);
+    expect(r.find((x) => x.currency === "CDF")!.total).toBe(3000);
+    // 5 600 FC valent 2 $ au taux de 2 800 : trois en font six.
+    expect(r.find((x) => x.currency === "USD")!.total).toBe(6);
+  });
+
+  it("garde un ordre stable d'un rendu à l'autre", () => {
+    const lignes = [ligneDe("a", 1, 2800, "USD"), ligneDe("b", 1, 1000)];
+    const r1 = totauxParDevise({ lines: lignes, currencies: devises, invoiceCurrency: "CDF" });
+    const r2 = totauxParDevise({
+      lines: [...lignes].reverse(),
+      currencies: devises,
+      invoiceCurrency: "CDF",
+    });
+    expect(r1.map((x) => x.currency)).toEqual(r2.map((x) => x.currency));
+  });
+
+  it("une ligne sans devise suit la facture", () => {
+    const r = totauxParDevise({
+      lines: [ligneDe("farine", 1, 2800)],
+      currencies: devises,
+      invoiceCurrency: "USD",
+    });
+    expect(r[0].currency).toBe("USD");
+    expect(r[0].total).toBe(1);
   });
 });

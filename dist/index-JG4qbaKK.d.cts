@@ -304,6 +304,23 @@ interface BasketLine {
     /** Prix d'une unité de détail, en devise principale. */
     unit_price: number;
     discount_percentage: number;
+    /**
+     * Devise dans laquelle le prix de CETTE ligne est annoncé au client.
+     *
+     * ┌────────────────────────────────────────────────────────────────────────┐
+     * │ `unit_price` RESTE EN DEVISE PRINCIPALE, et c'est délibéré.            │
+     * │                                                                        │
+     * │ Changer sa devise aurait fait porter la conversion à toute             │
+     * │ l'arithmétique du panier - donc aux CONTRÔLES, qui sont en principale  │
+     * │ par construction : solde du client, plafond de crédit, valeur des      │
+     * │ points. Ce champ ne dit QUE dans quelle monnaie la ligne est           │
+     * │ ANNONCÉE ; la conversion a lieu au moment d'afficher et d'envoyer.     │
+     * │                                                                        │
+     * │ Absente : la ligne suit la devise de la facture, ce qu'elle a toujours │
+     * │ fait. Aucune vente existante ne change de comportement.                │
+     * └────────────────────────────────────────────────────────────────────────┘
+     */
+    priceCurrency?: string;
 }
 /** Contenu d'un conditionnement, ou `null` si le produit se vend à l'unité. */
 declare function packagingFactorOf(product: BasketProduct): number | null;
@@ -388,6 +405,30 @@ interface SaleCurrencyTotals {
  * └──────────────────────────────────────────────────────────────────────────┘
  */
 declare function saleCurrencyTotals({ lines, currencies, invoiceCurrency, globalDiscountAmount, loyaltyDiscount, }: SaleCurrencyInput): SaleCurrencyTotals;
+/** Un sous-total de panier, pour une devise d'annonce. */
+interface TotalParDevise {
+    currency: string;
+    subtotal: number;
+    itemDiscount: number;
+    tax: number;
+    total: number;
+}
+/**
+ * Ventile le panier par devise d'ANNONCE : ce que le client lit sur son ticket.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ CES SOUS-TOTAUX NE S'ADDITIONNENT PAS, ET C'EST TOUT LEUR OBJET.         │
+ * │                                                                          │
+ * │ Un marchand annonce la farine en francs et le savon importé en dollars.  │
+ * │ Les deux chiffres sont vrais, et leur somme n'existe dans aucune         │
+ * │ monnaie : c'est `saleCurrencyTotals` qui donne le total de la FACTURE,   │
+ * │ en convertissant chaque ligne au taux de sa devise.                      │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * Miroir de `apps/sales/currency_totals.py::ventiler`. L'ordre d'opérations y
+ * est le même : convertir puis arrondir CHAQUE prix unitaire, puis sommer.
+ */
+declare function totauxParDevise({ lines, currencies, invoiceCurrency, }: SaleCurrencyInput): TotalParDevise[];
 /**
  * Total de la facture, exprimé dans sa propre devise.
  *
@@ -514,6 +555,8 @@ interface SaleItemPayload {
     package_quantity?: number;
     loose_quantity?: number;
     package_unit_price?: number;
+    /** Devise d'annonce de la ligne. Absente : celle de la facture. */
+    price_currency?: string;
 }
 interface SalePaymentPayload {
     payment_method: string;
@@ -709,6 +752,7 @@ type index_SalePaymentPayload = SalePaymentPayload;
 type index_SaleTender = SaleTender;
 type index_StockedProductLike = StockedProductLike;
 type index_TenderLike = TenderLike;
+type index_TotalParDevise = TotalParDevise;
 type index_VerdictAjout = VerdictAjout;
 declare const index_addableBase: typeof addableBase;
 declare const index_addableChannels: typeof addableChannels;
@@ -735,9 +779,10 @@ declare const index_roundPoints: typeof roundPoints;
 declare const index_saleCurrencyTotals: typeof saleCurrencyTotals;
 declare const index_tendersIn: typeof tendersIn;
 declare const index_totalInSaleCurrency: typeof totalInSaleCurrency;
+declare const index_totauxParDevise: typeof totauxParDevise;
 declare const index_verifierAjout: typeof verifierAjout;
 declare namespace index {
-  export { type index_BasketInput as BasketInput, type index_BasketLine as BasketLine, type index_BasketProduct as BasketProduct, type index_BasketTotals as BasketTotals, type index_CreditCustomerLike as CreditCustomerLike, type index_CreditVerdict as CreditVerdict, type index_CurrencyFallback as CurrencyFallback, type index_CurrencyTable as CurrencyTable, type index_LigneStockee as LigneStockee, type index_LoyaltyProgramLike as LoyaltyProgramLike, index_MONEY_EPS as MONEY_EPS, type index_OrganizationCurrencyLike as OrganizationCurrencyLike, type index_Rupture as Rupture, type index_Saisie as Saisie, type index_SaleCurrencyInput as SaleCurrencyInput, type index_SaleCurrencyLine as SaleCurrencyLine, type index_SaleCurrencyTotals as SaleCurrencyTotals, type index_SaleItemPayload as SaleItemPayload, type index_SalePayload as SalePayload, type index_SalePayloadInput as SalePayloadInput, type index_SalePaymentPayload as SalePaymentPayload, type index_SaleTender as SaleTender, type index_StockedProductLike as StockedProductLike, type index_TenderLike as TenderLike, type index_VerdictAjout as VerdictAjout, index_addableBase as addableBase, index_addableChannels as addableChannels, index_addableLoose as addableLoose, index_addableSealed as addableSealed, index_basketTotals as basketTotals, index_buildSalePayload as buildSalePayload, index_createCurrencyTable as createCurrencyTable, index_evaluateCredit as evaluateCredit, index_inCart as inCart, index_lignesEnRupture as lignesEnRupture, index_lineGross as lineGross, index_looseQuantityOf as looseQuantityOf, index_loyaltyDiscount as loyaltyDiscount, index_maxGlobalDiscount as maxGlobalDiscount, index_maxLoyaltyAmount as maxLoyaltyAmount, index_maxUsablePoints as maxUsablePoints, index_minPointsToRedeem as minPointsToRedeem, index_packagingFactorOf as packagingFactorOf, index_panierServable as panierServable, index_pointValue as pointValue, index_r2 as r2, index_roundPoints as roundPoints, index_saleCurrencyTotals as saleCurrencyTotals, index_tendersIn as tendersIn, index_totalInSaleCurrency as totalInSaleCurrency, index_verifierAjout as verifierAjout };
+  export { type index_BasketInput as BasketInput, type index_BasketLine as BasketLine, type index_BasketProduct as BasketProduct, type index_BasketTotals as BasketTotals, type index_CreditCustomerLike as CreditCustomerLike, type index_CreditVerdict as CreditVerdict, type index_CurrencyFallback as CurrencyFallback, type index_CurrencyTable as CurrencyTable, type index_LigneStockee as LigneStockee, type index_LoyaltyProgramLike as LoyaltyProgramLike, index_MONEY_EPS as MONEY_EPS, type index_OrganizationCurrencyLike as OrganizationCurrencyLike, type index_Rupture as Rupture, type index_Saisie as Saisie, type index_SaleCurrencyInput as SaleCurrencyInput, type index_SaleCurrencyLine as SaleCurrencyLine, type index_SaleCurrencyTotals as SaleCurrencyTotals, type index_SaleItemPayload as SaleItemPayload, type index_SalePayload as SalePayload, type index_SalePayloadInput as SalePayloadInput, type index_SalePaymentPayload as SalePaymentPayload, type index_SaleTender as SaleTender, type index_StockedProductLike as StockedProductLike, type index_TenderLike as TenderLike, type index_TotalParDevise as TotalParDevise, type index_VerdictAjout as VerdictAjout, index_addableBase as addableBase, index_addableChannels as addableChannels, index_addableLoose as addableLoose, index_addableSealed as addableSealed, index_basketTotals as basketTotals, index_buildSalePayload as buildSalePayload, index_createCurrencyTable as createCurrencyTable, index_evaluateCredit as evaluateCredit, index_inCart as inCart, index_lignesEnRupture as lignesEnRupture, index_lineGross as lineGross, index_looseQuantityOf as looseQuantityOf, index_loyaltyDiscount as loyaltyDiscount, index_maxGlobalDiscount as maxGlobalDiscount, index_maxLoyaltyAmount as maxLoyaltyAmount, index_maxUsablePoints as maxUsablePoints, index_minPointsToRedeem as minPointsToRedeem, index_packagingFactorOf as packagingFactorOf, index_panierServable as panierServable, index_pointValue as pointValue, index_r2 as r2, index_roundPoints as roundPoints, index_saleCurrencyTotals as saleCurrencyTotals, index_tendersIn as tendersIn, index_totalInSaleCurrency as totalInSaleCurrency, index_totauxParDevise as totauxParDevise, index_verifierAjout as verifierAjout };
 }
 
-export { addableLoose as $, type BasketTotals as A, type BasketInput as B, type ChannelAvailability as C, type CreditCustomerLike as D, type CreditVerdict as E, type LoyaltyProgramLike as F, type Saisie as G, type SaleCurrencyInput as H, type SaleCurrencyLine as I, type SaleCurrencyTotals as J, type SaleItemPayload as K, type LigneStockee as L, MAX_QUANTITY as M, type SalePayload as N, type OrganizationCurrency as O, type PackagedProductLike as P, QUANTITY_DECIMALS as Q, type Rupture as R, type StockCounters as S, type SalePayloadInput as T, type SalePaymentPayload as U, type SaleTender as V, type StockedProductLike as W, type TenderLike as X, type VerdictAjout as Y, addableBase as Z, addableChannels as _, type CurrencyFallback as a, addableSealed as a0, basketTotals as a1, buildSalePayload as a2, evaluateCredit as a3, inCart as a4, lignesEnRupture as a5, lineGross as a6, looseQuantityOf as a7, loyaltyDiscount as a8, maxGlobalDiscount as a9, maxLoyaltyAmount as aa, maxUsablePoints as ab, minPointsToRedeem as ac, packagingFactorOf as ad, panierServable as ae, pointValue as af, roundPoints as ag, saleCurrencyTotals as ah, tendersIn as ai, totalInSaleCurrency as aj, verifierAjout as ak, type CurrencyInfo as b, type CurrencyTable as c, MIN_QUANTITY as d, MONEY_EPS as e, type MoneyHelpers as f, type OrganizationCurrencyLike as g, type Packaging as h, QUANTITY_INTEGER_DIGITS as i, availableBase as j, availableSplit as k, createCurrencyTable as l, createMoneyHelpers as m, formatPackaged as n, formatPackagedDifference as o, formatPackagedSplit as p, formatQuantity as q, getPackaging as r, index as s, r2 as t, remainingChannels as u, roundQuantity as v, splitPackaged as w, toBaseQuantity as x, type BasketLine as y, type BasketProduct as z };
+export { addableChannels as $, type BasketTotals as A, type BasketInput as B, type ChannelAvailability as C, type CreditCustomerLike as D, type CreditVerdict as E, type LoyaltyProgramLike as F, type Saisie as G, type SaleCurrencyInput as H, type SaleCurrencyLine as I, type SaleCurrencyTotals as J, type SaleItemPayload as K, type LigneStockee as L, MAX_QUANTITY as M, type SalePayload as N, type OrganizationCurrency as O, type PackagedProductLike as P, QUANTITY_DECIMALS as Q, type Rupture as R, type StockCounters as S, type SalePayloadInput as T, type SalePaymentPayload as U, type SaleTender as V, type StockedProductLike as W, type TenderLike as X, type TotalParDevise as Y, type VerdictAjout as Z, addableBase as _, type CurrencyFallback as a, addableLoose as a0, addableSealed as a1, basketTotals as a2, buildSalePayload as a3, evaluateCredit as a4, inCart as a5, lignesEnRupture as a6, lineGross as a7, looseQuantityOf as a8, loyaltyDiscount as a9, maxGlobalDiscount as aa, maxLoyaltyAmount as ab, maxUsablePoints as ac, minPointsToRedeem as ad, packagingFactorOf as ae, panierServable as af, pointValue as ag, roundPoints as ah, saleCurrencyTotals as ai, tendersIn as aj, totalInSaleCurrency as ak, totauxParDevise as al, verifierAjout as am, type CurrencyInfo as b, type CurrencyTable as c, MIN_QUANTITY as d, MONEY_EPS as e, type MoneyHelpers as f, type OrganizationCurrencyLike as g, type Packaging as h, QUANTITY_INTEGER_DIGITS as i, availableBase as j, availableSplit as k, createCurrencyTable as l, createMoneyHelpers as m, formatPackaged as n, formatPackagedDifference as o, formatPackagedSplit as p, formatQuantity as q, getPackaging as r, index as s, r2 as t, remainingChannels as u, roundQuantity as v, splitPackaged as w, toBaseQuantity as x, type BasketLine as y, type BasketProduct as z };

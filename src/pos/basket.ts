@@ -44,6 +44,23 @@ export interface BasketLine {
   /** Prix d'une unité de détail, en devise principale. */
   unit_price: number;
   discount_percentage: number;
+  /**
+   * Devise dans laquelle le prix de CETTE ligne est annoncé au client.
+   *
+   * ┌────────────────────────────────────────────────────────────────────────┐
+   * │ `unit_price` RESTE EN DEVISE PRINCIPALE, et c'est délibéré.            │
+   * │                                                                        │
+   * │ Changer sa devise aurait fait porter la conversion à toute             │
+   * │ l'arithmétique du panier - donc aux CONTRÔLES, qui sont en principale  │
+   * │ par construction : solde du client, plafond de crédit, valeur des      │
+   * │ points. Ce champ ne dit QUE dans quelle monnaie la ligne est           │
+   * │ ANNONCÉE ; la conversion a lieu au moment d'afficher et d'envoyer.     │
+   * │                                                                        │
+   * │ Absente : la ligne suit la devise de la facture, ce qu'elle a toujours │
+   * │ fait. Aucune vente existante ne change de comportement.                │
+   * └────────────────────────────────────────────────────────────────────────┘
+   */
+  priceCurrency?: string;
 }
 
 /** Contenu d'un conditionnement, ou `null` si le produit se vend à l'unité. */
@@ -244,6 +261,75 @@ export function saleCurrencyTotals({
     total: currencies.round(subtotal - itemDiscount - globalDisc - loyaltyDisc + tax, cur),
     lines: perLine,
   };
+}
+
+/** Un sous-total de panier, pour une devise d'annonce. */
+export interface TotalParDevise {
+  currency: string;
+  subtotal: number;
+  itemDiscount: number;
+  tax: number;
+  total: number;
+}
+
+/**
+ * Ventile le panier par devise d'ANNONCE : ce que le client lit sur son ticket.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ CES SOUS-TOTAUX NE S'ADDITIONNENT PAS, ET C'EST TOUT LEUR OBJET.         │
+ * │                                                                          │
+ * │ Un marchand annonce la farine en francs et le savon importé en dollars.  │
+ * │ Les deux chiffres sont vrais, et leur somme n'existe dans aucune         │
+ * │ monnaie : c'est `saleCurrencyTotals` qui donne le total de la FACTURE,   │
+ * │ en convertissant chaque ligne au taux de sa devise.                      │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * Miroir de `apps/sales/currency_totals.py::ventiler`. L'ordre d'opérations y
+ * est le même : convertir puis arrondir CHAQUE prix unitaire, puis sommer.
+ */
+export function totauxParDevise({
+  lines,
+  currencies,
+  invoiceCurrency,
+}: SaleCurrencyInput): TotalParDevise[] {
+  const facture = invoiceCurrency || currencies.primary;
+  const primary = currencies.primary;
+  const par = new Map<string, TotalParDevise>();
+
+  for (const line of lines) {
+    const cur = line.priceCurrency?.trim() || facture;
+    const unit = currencies.convertMoney(line.unit_price, primary, cur);
+    const packageUnitPrice = currencies.convertMoney(
+      num(line.product.wholesale_price),
+      primary,
+      cur
+    );
+    const factor = packagingFactorOf(line.product);
+    const gross =
+      factor && line.packageQuantity > 0
+        ? currencies.round(
+            line.packageQuantity * packageUnitPrice + looseQuantityOf(line) * unit,
+            cur
+          )
+        : currencies.round(line.quantity * unit, cur);
+    const discount = currencies.round((gross * line.discount_percentage) / 100, cur);
+    const taxe = line.product.is_taxable
+      ? currencies.round(((gross - discount) * num(line.product.tax_rate)) / 100, cur)
+      : 0;
+
+    const acc = par.get(cur) ?? {
+      currency: cur, subtotal: 0, itemDiscount: 0, tax: 0, total: 0,
+    };
+    acc.subtotal += gross;
+    acc.itemDiscount += discount;
+    acc.tax += taxe;
+    acc.total = currencies.round(acc.subtotal - acc.itemDiscount + acc.tax, cur);
+    par.set(cur, acc);
+  }
+
+  // Tri par code : un ordre stable, pour que deux rendus successifs ne
+  // présentent pas les mêmes devises dans un ordre différent.
+  return [...par.values()].sort((a, b) => a.currency.localeCompare(b.currency));
 }
 
 /**
