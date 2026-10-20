@@ -346,6 +346,19 @@ interface SaleReceiptItem {
     unitPrice: number;
     discountPercentage?: number;
     total: number;
+    /**
+     * Devise dans laquelle CE prix a été annoncé au client.
+     *
+     * Absente : celle de la facture, ce que tout ticket a porté jusqu'ici.
+     * `SaleReceiptPayment` portait déjà la sienne ; la ligne d'article, non -
+     * et c'est ce qui empêchait d'imprimer une vente annoncée en deux monnaies.
+     */
+    currency?: string;
+}
+/** Un sous-total du ticket, pour une devise d'annonce. */
+interface SaleReceiptCurrencyTotal {
+    currency: string;
+    total: number;
 }
 interface SaleReceiptPayment {
     method: string;
@@ -357,6 +370,15 @@ interface SaleReceiptData extends BaseDocumentData {
     chrome: ReceiptChrome;
     warehouseName?: string;
     items: SaleReceiptItem[];
+    /**
+     * Les sous-totaux ANNONCÉS, par devise.
+     *
+     * ⚠ ILS NE S'ADDITIONNENT PAS, et c'est tout leur objet : leur somme
+     * n'existe dans aucune monnaie. C'est « Total à payer » qui donne la
+     * facture, en convertissant chaque ligne au taux de sa devise. Absent ou à
+     * une seule entrée : rien ne s'imprime, le ticket est mono-devise.
+     */
+    currencyTotals?: SaleReceiptCurrencyTotal[];
     subtotal: number;
     taxAmount: number;
     /** Remise totale, part payée en points comprise. */

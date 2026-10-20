@@ -27,6 +27,20 @@ export interface SaleReceiptItem {
   unitPrice: number;
   discountPercentage?: number;
   total: number;
+  /**
+   * Devise dans laquelle CE prix a été annoncé au client.
+   *
+   * Absente : celle de la facture, ce que tout ticket a porté jusqu'ici.
+   * `SaleReceiptPayment` portait déjà la sienne ; la ligne d'article, non -
+   * et c'est ce qui empêchait d'imprimer une vente annoncée en deux monnaies.
+   */
+  currency?: string;
+}
+
+/** Un sous-total du ticket, pour une devise d'annonce. */
+export interface SaleReceiptCurrencyTotal {
+  currency: string;
+  total: number;
 }
 
 export interface SaleReceiptPayment {
@@ -40,6 +54,15 @@ export interface SaleReceiptData extends BaseDocumentData {
   chrome: ReceiptChrome;
   warehouseName?: string;
   items: SaleReceiptItem[];
+  /**
+   * Les sous-totaux ANNONCÉS, par devise.
+   *
+   * ⚠ ILS NE S'ADDITIONNENT PAS, et c'est tout leur objet : leur somme
+   * n'existe dans aucune monnaie. C'est « Total à payer » qui donne la
+   * facture, en convertissant chaque ligne au taux de sa devise. Absent ou à
+   * une seule entrée : rien ne s'imprime, le ticket est mono-devise.
+   */
+  currencyTotals?: SaleReceiptCurrencyTotal[];
   subtotal: number;
   taxAmount: number;
   /** Remise totale, part payée en points comprise. */
@@ -98,10 +121,18 @@ function discountLabel(data: SaleReceiptData): string {
 }
 
 export function buildSaleReceipt(data: SaleReceiptData): Block[] {
+  /** Cette ligne est-elle annoncée dans une autre monnaie que la facture ? */
+  const ligneHorsFacture = (item: SaleReceiptItem) =>
+    !!item.currency && item.currency !== data.currency;
+
   const money = (amount: number, currency = data.currency) =>
     formatMoney(amount, currency, data.currencyOverrides);
-  const bare = (amount: number) =>
-    formatBare(amount, data.currency, data.currencyOverrides);
+  // ⚠ LA DEVISE EST UN PARAMÈTRE, PLUS UNE CONSTANTE. Elle était codée sur
+  // `data.currency` pour TOUTES les lignes : une vente annoncée en deux
+  // monnaies sortait donc avec le symbole de la facture sur chaque prix, et le
+  // client lisait des francs là où on lui avait dit des dollars.
+  const bare = (amount: number, currency = data.currency) =>
+    formatBare(amount, currency, data.currencyOverrides);
 
   const isProforma = data.kind === "proforma";
   const discounts = splitDiscount(data);
@@ -109,8 +140,15 @@ export function buildSaleReceipt(data: SaleReceiptData): Block[] {
   const items: ItemRow[] = data.items.map((item) => ({
     name: item.name,
     quantity: formatQuantity(item.quantity),
-    unitPrice: bare(item.unitPrice),
-    total: bare(item.total),
+    // ⚠ LE CODE EST ACCOLÉ quand la ligne sort de la devise de facture. Sans
+    // lui, « 2,00 » et « 5 600 » se lisent sur la même colonne sans rien qui
+    // dise lequel est en dollars - et c'est le prix que le client vérifie.
+    unitPrice: ligneHorsFacture(item)
+      ? `${bare(item.unitPrice, item.currency)} ${item.currency}`
+      : bare(item.unitPrice),
+    total: ligneHorsFacture(item)
+      ? `${bare(item.total, item.currency)} ${item.currency}`
+      : bare(item.total),
     quantityLabel: item.quantityLabel,
     discountPercentage: item.discountPercentage,
   }));
@@ -147,6 +185,11 @@ export function buildSaleReceipt(data: SaleReceiptData): Block[] {
     },
   ]);
 
+  // Les sous-totaux par devise. L'appelant les fournit - c'est le serveur qui
+  // les a figés avec leurs taux - et on ne les recalcule JAMAIS ici : un
+  // ticket est le pire endroit pour refaire une arithmétique de vente.
+  const ventilation = data.currencyTotals ?? [];
+
   const extraInfo = compact<KvRow>([
     data.warehouseName && { label: "Dépôt", value: data.warehouseName },
     data.dueDate && { label: "À régler avant le", value: data.dueDate },
@@ -162,6 +205,34 @@ export function buildSaleReceipt(data: SaleReceiptData): Block[] {
     { kind: "space", size: "xs" },
     { kind: "rule", weight: "light" },
     { kind: "amounts", rows: totalRows, role: "body" },
+
+    // ┌──────────────────────────────────────────────────────────────────────┐
+    // │ CE QUI A ÉTÉ ANNONCÉ, DEVISE PAR DEVISE.                             │
+    // │                                                                      │
+    // │ Même forme que le Z de caisse, qui tient déjà sur 58 mm : un espace, │
+    // │ une pastille portant le code, puis le montant. Empilement vertical,  │
+    // │ jamais de colonnes - c'est ce qui passe sur les 48 mm réellement     │
+    // │ chauffés par la tête.                                                │
+    // │                                                                      │
+    // │ Il ne s'imprime QUE sur une vente réellement mixte : sur une vente   │
+    // │ d'une seule devise il répéterait le sous-total, et le papier d'un    │
+    // │ rouleau de comptoir est un budget qu'on ne gaspille pas.             │
+    // └──────────────────────────────────────────────────────────────────────┘
+    ...(ventilation.length > 1
+      ? [
+          { kind: "space", size: "xs" } as Block,
+          { kind: "text", text: "Annoncé au client", role: "label" } as Block,
+          {
+            kind: "amounts",
+            rows: ventilation.map((v) => ({
+              label: v.currency,
+              value: money(v.total, v.currency),
+            })),
+            role: "body",
+          } as Block,
+        ]
+      : []),
+
     { kind: "space", size: "sm" },
 
     {

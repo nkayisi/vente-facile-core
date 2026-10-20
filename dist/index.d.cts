@@ -1,5 +1,5 @@
 export { C as ChannelAvailability, a as CurrencyFallback, b as CurrencyInfo, c as CurrencyTable, M as MAX_QUANTITY, d as MIN_QUANTITY, e as MONEY_EPS, f as MoneyHelpers, O as OrganizationCurrency, g as OrganizationCurrencyLike, P as PackagedProductLike, h as Packaging, Q as QUANTITY_DECIMALS, i as QUANTITY_INTEGER_DIGITS, S as StockCounters, j as availableBase, k as availableSplit, l as createCurrencyTable, m as createMoneyHelpers, n as formatPackaged, o as formatPackagedDifference, p as formatPackagedSplit, q as formatQuantity, r as getPackaging, s as pos, t as r2, u as remainingChannels, v as roundQuantity, w as splitPackaged, x as toBaseQuantity } from './index-JG4qbaKK.cjs';
-export { i as receipt } from './index-JMgr7H4b.cjs';
+export { i as receipt } from './index-Bk89erBd.cjs';
 
 /**
  * Formatage français, sans `Intl`.

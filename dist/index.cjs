@@ -895,15 +895,19 @@ function discountLabel(data) {
   return "Remises";
 }
 function buildSaleReceipt(data) {
+  const ligneHorsFacture = (item) => !!item.currency && item.currency !== data.currency;
   const money = (amount, currency = data.currency) => formatMoney(amount, currency, data.currencyOverrides);
-  const bare = (amount) => formatBare(amount, data.currency, data.currencyOverrides);
+  const bare = (amount, currency = data.currency) => formatBare(amount, currency, data.currencyOverrides);
   const isProforma = data.kind === "proforma";
   const discounts = splitDiscount(data);
   const items = data.items.map((item) => ({
     name: item.name,
     quantity: formatQuantity2(item.quantity),
-    unitPrice: bare(item.unitPrice),
-    total: bare(item.total),
+    // ⚠ LE CODE EST ACCOLÉ quand la ligne sort de la devise de facture. Sans
+    // lui, « 2,00 » et « 5 600 » se lisent sur la même colonne sans rien qui
+    // dise lequel est en dollars - et c'est le prix que le client vérifie.
+    unitPrice: ligneHorsFacture(item) ? `${bare(item.unitPrice, item.currency)} ${item.currency}` : bare(item.unitPrice),
+    total: ligneHorsFacture(item) ? `${bare(item.total, item.currency)} ${item.currency}` : bare(item.total),
     quantityLabel: item.quantityLabel,
     discountPercentage: item.discountPercentage
   }));
@@ -937,6 +941,7 @@ function buildSaleReceipt(data) {
       strong: true
     }
   ]);
+  const ventilation = data.currencyTotals ?? [];
   const extraInfo = compact([
     data.warehouseName && { label: "D\xE9p\xF4t", value: data.warehouseName },
     data.dueDate && { label: "\xC0 r\xE9gler avant le", value: data.dueDate }
@@ -950,6 +955,30 @@ function buildSaleReceipt(data) {
     { kind: "space", size: "xs" },
     { kind: "rule", weight: "light" },
     { kind: "amounts", rows: totalRows, role: "body" },
+    // ┌──────────────────────────────────────────────────────────────────────┐
+    // │ CE QUI A ÉTÉ ANNONCÉ, DEVISE PAR DEVISE.                             │
+    // │                                                                      │
+    // │ Même forme que le Z de caisse, qui tient déjà sur 58 mm : un espace, │
+    // │ une pastille portant le code, puis le montant. Empilement vertical,  │
+    // │ jamais de colonnes - c'est ce qui passe sur les 48 mm réellement     │
+    // │ chauffés par la tête.                                                │
+    // │                                                                      │
+    // │ Il ne s'imprime QUE sur une vente réellement mixte : sur une vente   │
+    // │ d'une seule devise il répéterait le sous-total, et le papier d'un    │
+    // │ rouleau de comptoir est un budget qu'on ne gaspille pas.             │
+    // └──────────────────────────────────────────────────────────────────────┘
+    ...ventilation.length > 1 ? [
+      { kind: "space", size: "xs" },
+      { kind: "text", text: "Annonc\xE9 au client", role: "label" },
+      {
+        kind: "amounts",
+        rows: ventilation.map((v) => ({
+          label: v.currency,
+          value: money(v.total, v.currency)
+        })),
+        role: "body"
+      }
+    ] : [],
     { kind: "space", size: "sm" },
     {
       kind: "total",
