@@ -139,14 +139,6 @@ declare function getCurrencySymbol(code: string): string;
  */
 declare function getCurrencyName(code: string): string;
 
-/**
- * Mise au pluriel des libellés d'unités saisis par le marchand.
- *
- * Ces libellés sont du texte libre et arrivent tels quels : « pièce »,
- * « PLAQUETTE », « Carton ». Ajouter un « s » minuscule à un mot saisi en
- * majuscules donnait « 10 PIECEs », ce qui saute aux yeux dans une fiche
- * produit. On suit donc la casse du mot d'origine.
- */
 declare function pluralizeUnit(word: string, count: number): string;
 
 /**

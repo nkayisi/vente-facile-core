@@ -233,3 +233,40 @@ describe("Quantité et son unité", () => {
     expect(formatUnitQuantity(1500.5, "kg")).toContain("\u202f");
   });
 });
+
+/**
+ * Les symboles d'unité ne prennent jamais le pluriel.
+ *
+ * « 2,5 kgs » est le défaut que la vente au poids a rendu courant : il existait
+ * déjà (« 3 kgs »), mais une quantité fractionnaire s'affiche à chaque ligne
+ * d'un commerce qui pèse.
+ */
+describe("Accord des unités", () => {
+  it("laisse un symbole invariable", () => {
+    expect(formatUnitQuantity(2.5, "kg")).toBe("2,5 kg");
+    // ⚠ L'espace fine insécable est INVISIBLE à l'œil dans un test : écrite en
+    // espace ordinaire, cette attente échouait sur une différence qu'on ne
+    // voyait pas. On l'écrit en échappement.
+    expect(formatUnitQuantity(1500, "L")).toBe("1\u202f500 L");
+    expect(formatUnitQuantity(3, "ml")).toBe("3 ml");
+    expect(formatUnitQuantity(12, "m2")).toBe("12 m2");
+  });
+
+  it("accorde un NOM commun, qui reste la règle", () => {
+    expect(formatUnitQuantity(3, "sac")).toBe("3 sacs");
+    expect(formatUnitQuantity(3, "casier")).toBe("3 casiers");
+    expect(formatUnitQuantity(3, "PLAQUETTE")).toBe("3 PLAQUETTES");
+  });
+
+  it("ne touche à rien sous deux", () => {
+    expect(formatUnitQuantity(1, "sac")).toBe("1 sac");
+    expect(formatUnitQuantity(0.5, "kg")).toBe("0,5 kg");
+  });
+
+  it("ignore la casse du symbole, et la conserve", () => {
+    // « L » est le symbole du litre, « l » aussi : les deux sont invariables,
+    // et on ne change pas ce que le marchand a saisi.
+    expect(formatUnitQuantity(4, "KG")).toBe("4 KG");
+    expect(formatUnitQuantity(4, "Kg")).toBe("4 Kg");
+  });
+});
