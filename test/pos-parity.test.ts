@@ -26,6 +26,7 @@ import {
   type BasketLine,
   type OrganizationCurrencyLike,
 } from "../src/pos/index";
+import { MIN_QUANTITY } from "../src/packaging";
 
 // ---------------------------------------------------------------------------
 // Le témoin : code d'origine, recopié sans retouche.
@@ -188,6 +189,28 @@ const CURRENCIES: OrganizationCurrencyLike[] = [
   { currency_code: "EUR", exchange_rate: "3050.5", currency_symbol: "€", currency_decimal_places: 2 },
 ];
 
+/**
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ LE TÉMOIN ÉTAIT MUET, ET IL FALLAIT LE DIRE.                             │
+ * │                                                                          │
+ * │ Ce générateur tirait `Math.floor(rnd() * 40)` et posait `loose + 1` : les │
+ * │ 2 000 paniers étaient INTÉGRALEMENT ENTIERS. Le témoin restait donc vert  │
+ * │ quelle que soit la façon dont le paquet traitait une quantité sous        │
+ * │ l'unité, alors que c'est tout ce que le produit vend au poids depuis      │
+ * │ octobre. Il gardait l'arithmétique entière, et rien d'autre.              │
+ * │                                                                          │
+ * │ ⚠ LES LIGNES CONDITIONNÉES GARDENT UN VRAC ENTIER, ET C'EST DÉLIBÉRÉ.    │
+ * │ Le témoin porte une copie VERBATIM du `looseQuantityOf` d'origine, dont   │
+ * │ la soustraction n'est pas quantisée. Le paquet, lui, la quantise          │
+ * │ désormais. Les deux divergeraient donc par construction sur une part      │
+ * │ vrac fractionnaire, et le témoin pourrait échouer POUR LE CORRECTIF       │
+ * │ LUI-MÊME. Un témoin qu'on doit expliquer n'est plus un témoin.            │
+ * │                                                                          │
+ * │ Ce cas-là est couvert ailleurs, contre une valeur ATTENDUE et non contre  │
+ * │ le témoin : `pos-stock.test.ts` et `pos-payload.test.ts`. C'est l'oracle  │
+ * │ qui change, et c'est le bon.                                             │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
 function makeBasket(rnd: () => number): BasketLine[] {
   const n = 1 + Math.floor(rnd() * 6);
   const lines: BasketLine[] = [];
@@ -197,8 +220,12 @@ function makeBasket(rnd: () => number): BasketLine[] {
     const packaged = rnd() < 0.5;
     const factor = packaged ? 2 + Math.floor(rnd() * 22) : 0;
     const packageQuantity = packaged && rnd() < 0.8 ? Math.floor(rnd() * 5) : 0;
-    const loose = Math.floor(rnd() * 40);
-    const quantity = packaged ? packageQuantity * factor + loose : loose + 1;
+    // Au millième sur une ligne vendue au détail, c'est-à-dire sur tout ce
+    // qui se pèse. Le plancher est celui du serveur : `MinValueValidator(0.001)`.
+    const loose = packaged
+      ? Math.floor(rnd() * 40)
+      : Math.max(MIN_QUANTITY, Math.round(rnd() * 40000) / 1000);
+    const quantity = packaged ? packageQuantity * factor + loose : loose;
     lines.push({
       product: {
         selling_mode: packaged ? "wholesale_and_retail" : "retail_only",
@@ -220,10 +247,12 @@ describe("POS : l'extraction n'a rien changé", () => {
   it("rend le même chiffre que le code d'origine sur 2 000 paniers tirés au hasard", () => {
     const table = createCurrencyTable(CURRENCIES, { code: "CDF", decimal_places: 2 });
     const divergences: string[] = [];
+    let fractionnaires = 0;
 
     for (let seed = 1; seed <= 2000; seed++) {
       const rnd = mulberry32(seed);
       const lines = makeBasket(rnd);
+      fractionnaires += lines.filter((l) => l.quantity % 1 !== 0).length;
       const invoiceCurrency = ["CDF", "USD", "EUR"][Math.floor(rnd() * 3)];
       const globalDiscountAmount = rnd() < 0.7 ? 0 : Math.round(rnd() * 500000) / 100;
       const program = {
@@ -315,6 +344,12 @@ describe("POS : l'extraction n'a rien changé", () => {
     }
 
     expect(divergences).toEqual([]);
+
+    // ⚠ LE COMPTEUR EST OBLIGATOIRE. Sans lui, un ajustement futur du
+    // générateur pourrait reconstituer un corpus entier, et le témoin
+    // redeviendrait muet sans que rien ne le signale : il resterait vert, ce
+    // qui est exactement l'état dont ce lot le sort.
+    expect(fractionnaires).toBeGreaterThan(500);
   });
 });
 

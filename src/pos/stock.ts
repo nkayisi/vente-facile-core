@@ -297,7 +297,14 @@ export function lignesEnRupture(lines: LigneStockee[]): Rupture[] {
     // refuserait par « Indiquez une quantité », message qui n'a rien à faire
     // dans un bandeau de rupture. Elle ne devrait pas exister, et si elle
     // existe c'est un autre défaut.
-    if (ligne.quantity < 1) return;
+    //
+    // ⚠ LE SEUIL EST `MIN_QUANTITY`, JAMAIS 1. Avec un seuil à 1, une ligne de
+    // 0,5 kg n'était JAMAIS contrôlée contre le stock : `panierServable`
+    // rendait vrai, `motifsEncaissement` rendait une liste vide, et le ticket
+    // s'imprimait pour une vente que le serveur refuse. C'est exactement
+    // l'invariant que l'encadré ci-dessus déclare tenir. Une ligne de 0,5 n'est
+    // pas vide ; seule une ligne sous le plus petit pas enregistrable l'est.
+    if (ligne.quantity < MIN_QUANTITY) return;
 
     const autres = lines.filter((_, i) => i !== index);
     const verdict = verifierAjout(ligne.product, autres, {

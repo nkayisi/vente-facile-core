@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatPackaged,
   formatPackagedDifference,
+  formatUnitQuantity,
   formatPackagedSplit,
   getPackaging,
   remainingChannels,
@@ -184,5 +185,51 @@ describe("Disponible ventilé", () => {
     // Un entrepôt tolérant le découvert : « -2 casiers » n'a aucun sens à l'écran.
     expect(availableSplit({ quantity: -5, loose_quantity: 0, reserved_quantity: 1 }, 12))
       .toEqual({ packages: 0, loose: -6 });
+  });
+});
+
+/**
+ * Une quantité collée à son unité.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ CETTE FONCTION INTERPOLAIT LE NOMBRE BRUT.                               │
+ * │                                                                          │
+ * │ Elle rendait donc « 0.5 kg » au point anglais, et                        │
+ * │ « 0.3000000000000007 bouteilles » dès qu'une part vrac était dérivée     │
+ * │ d'un total quantisé. Une soixantaine de sites des deux surfaces          │
+ * │ écrivaient la même forme à la main, chacun libre de dériver.             │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+describe("Quantité et son unité", () => {
+  it("écrit un demi à la française, et garde son zéro de tête", () => {
+    expect(formatUnitQuantity(0.5, "kg")).toBe("0,5 kg");
+  });
+
+  it("ne rend jamais « 0 » pour une quantité qui existe", () => {
+    // `formatNumber` du noyau est un formateur d'ENTIERS : il rend « 0 » pour
+    // 0,3 et « 1 » pour 0,5. C'est lui qui s'écrivait ici.
+    expect(formatUnitQuantity(0.3, "kg")).toBe("0,3 kg");
+    expect(formatUnitQuantity(0.001, "kg")).toBe("0,001 kg");
+  });
+
+  it("absorbe le résidu d'une part vrac dérivée", () => {
+    expect(formatUnitQuantity(24.3 - 24, "bouteille")).toBe("0,3 bouteille");
+  });
+
+  it("n'imprime pas de décimales pour rien", () => {
+    expect(formatUnitQuantity(10, "PIECE")).toBe("10 PIECES");
+  });
+
+  it("suit la casse du mot du marchand", () => {
+    // Régression déjà payée : « 10 PIECEs » saute aux yeux dans une fiche.
+    expect(formatUnitQuantity(2, "PLAQUETTE")).toBe("2 PLAQUETTES");
+    expect(formatUnitQuantity(1, "plaquette")).toBe("1 plaquette");
+  });
+
+  it("groupe les milliers, et c'est ce qui l'interdit sur le papier", () => {
+    // L'espace fine insécable (U+202F) que la police helvetica de jsPDF rend
+    // en « / ». Le ticket a son propre helper, et ce test est la moitié du
+    // garde-fou qui tient la frontière.
+    expect(formatUnitQuantity(1500.5, "kg")).toContain("\u202f");
   });
 });

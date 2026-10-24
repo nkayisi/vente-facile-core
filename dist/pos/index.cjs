@@ -159,7 +159,7 @@ function packagingFactorOf(product) {
 function looseQuantityOf(line) {
   const factor = packagingFactorOf(line.product);
   if (!factor || !line.packageQuantity) return line.quantity;
-  return line.quantity - line.packageQuantity * factor;
+  return roundQuantity(line.quantity - line.packageQuantity * factor);
 }
 var num = (v) => {
   const n = typeof v === "string" ? parseFloat(v) : Number(v ?? 0);
@@ -525,7 +525,7 @@ function verifierAjout(product, lines, saisie) {
 function lignesEnRupture(lines) {
   const ruptures = [];
   lines.forEach((ligne, index) => {
-    if (ligne.quantity < 1) return;
+    if (ligne.quantity < MIN_QUANTITY) return;
     const autres = lines.filter((_, i) => i !== index);
     const verdict = verifierAjout(ligne.product, autres, {
       packages: ligne.packageQuantity,

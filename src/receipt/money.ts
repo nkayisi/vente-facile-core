@@ -16,6 +16,7 @@
  */
 
 import { getCurrencyByCode } from "../currencies";
+import { pluralizeUnit } from "../units";
 
 /** Décimales et symbole propres à l'organisation, quand elle les redéfinit. */
 export interface CurrencyOverride {
@@ -76,12 +77,40 @@ export function formatPoints(points: number | undefined | null): string {
   return Number.isInteger(rounded) ? String(rounded) : formatAmount(rounded, 2);
 }
 
-/** Quantité : 3 décimales possibles, mais on ne les imprime pas pour rien. */
+/**
+ * Quantité : 3 décimales possibles, mais on ne les imprime pas pour rien.
+ *
+ * L'arrondi au millième n'est pas décoratif : il absorbe le résidu binaire
+ * d'une part vrac dérivée (`0.3000000000000007`), que le papier rendrait en
+ * entier. Les milliers ne sont PAS groupés, contrairement aux montants : une
+ * quantité de comptoir dépasse rarement le millier, et grouper demanderait de
+ * distinguer le séparateur de milliers du séparateur décimal sur un rendu qui
+ * emploie le point pour le second.
+ */
 export function formatQuantity(quantity: number | string): string {
   const n = typeof quantity === "string" ? parseFloat(quantity) : quantity;
   const safe = Number.isFinite(n) ? n : 0;
-  const rounded = Math.round(safe * 1000) / 1000;
-  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+  return String(Math.round(safe * 1000) / 1000);
+}
+
+/**
+ * Une quantité avec son unité accordée, POUR LE PAPIER : « 0.5 kg ».
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ UN FORMATEUR D'ÉCRAN N'ATTEINT JAMAIS UN DOCUMENT.                       │
+ * │                                                                          │
+ * │ `formatUnitQuantity` du noyau groupe les milliers avec une espace fine   │
+ * │ insécable (U+202F), que la police helvetica intégrée à jsPDF rend en     │
+ * │ « / ». Le ticket a donc son propre couple nombre + unité, et c'est la    │
+ * │ même raison qui fait coexister deux `formatQuantity` dans ce paquet.     │
+ * │                                                                          │
+ * │ Le point décimal est VOLONTAIRE ici, et seulement ici.                   │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+export function formatQuantityWithUnit(quantity: number | string, word: string): string {
+  const n = typeof quantity === "string" ? parseFloat(quantity) : quantity;
+  const safe = Number.isFinite(n) ? n : 0;
+  return `${formatQuantity(safe)} ${pluralizeUnit(word, safe)}`.trim();
 }
 
 /**

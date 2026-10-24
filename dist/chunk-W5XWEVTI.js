@@ -1,4 +1,7 @@
 import {
+  pluralizeUnit
+} from "./chunk-OYOUHUM6.js";
+import {
   __export
 } from "./chunk-PZ5AY32C.js";
 
@@ -184,19 +187,6 @@ function createMoneyHelpers(currencies, fallback) {
   };
 }
 
-// src/units.ts
-function pluralizeUnit(word, count) {
-  const mot = (word || "").trim();
-  if (!mot) return "";
-  if (Math.abs(count) < 2) return mot;
-  if (/[sxz]$/i.test(mot)) return mot;
-  const enCapitales = mot === mot.toUpperCase() && /[A-ZÀ-Ÿ]/.test(mot);
-  return `${mot}${enCapitales ? "S" : "s"}`;
-}
-function formatUnitQuantity(count, word) {
-  return `${count} ${pluralizeUnit(word, count)}`.trim();
-}
-
 // src/packaging.ts
 var QUANTITY_DECIMALS = 3;
 var QUANTITY_INTEGER_DIGITS = 12;
@@ -209,6 +199,9 @@ function roundQuantity(n) {
 }
 function formatQuantity(n) {
   return formatNumberFr(n, QUANTITY_DECIMALS);
+}
+function formatUnitQuantity(count, word) {
+  return `${formatQuantity(count)} ${pluralizeUnit(word, count)}`.trim();
 }
 function getPackaging(product) {
   if (!product) return null;
@@ -305,7 +298,7 @@ function packagingFactorOf(product) {
 function looseQuantityOf(line) {
   const factor = packagingFactorOf(line.product);
   if (!factor || !line.packageQuantity) return line.quantity;
-  return line.quantity - line.packageQuantity * factor;
+  return roundQuantity(line.quantity - line.packageQuantity * factor);
 }
 var num = (v) => {
   const n = typeof v === "string" ? parseFloat(v) : Number(v ?? 0);
@@ -712,7 +705,7 @@ function verifierAjout(product, lines, saisie) {
 function lignesEnRupture(lines) {
   const ruptures = [];
   lines.forEach((ligne, index) => {
-    if (ligne.quantity < 1) return;
+    if (ligne.quantity < MIN_QUANTITY) return;
     const autres = lines.filter((_, i) => i !== index);
     const verdict = verifierAjout(ligne.product, autres, {
       packages: ligne.packageQuantity,
@@ -756,14 +749,13 @@ export {
   r2,
   createCurrencyTable,
   createMoneyHelpers,
-  pluralizeUnit,
-  formatUnitQuantity,
   QUANTITY_DECIMALS,
   QUANTITY_INTEGER_DIGITS,
   MAX_QUANTITY,
   MIN_QUANTITY,
   roundQuantity,
   formatQuantity,
+  formatUnitQuantity,
   getPackaging,
   splitPackaged,
   formatPackaged,
@@ -800,4 +792,4 @@ export {
   panierServable,
   pos_exports
 };
-//# sourceMappingURL=chunk-6FOPZG2J.js.map
+//# sourceMappingURL=chunk-W5XWEVTI.js.map

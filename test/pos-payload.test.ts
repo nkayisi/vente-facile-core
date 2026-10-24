@@ -69,6 +69,21 @@ describe("Corps de la vente", () => {
     expect(p.items[0].quantity).toBeUndefined();
   });
 
+  /**
+   * ⚠ C'EST LE CORPS HTTP QUI EST EN JEU, PAS UN ARRONDI D'AFFICHAGE.
+   *
+   * `loose_quantity` est un `DecimalField(max_digits=15, decimal_places=3)` :
+   * une part vrac dérivée sans quantisation sortait à `0.3000000000000007`, et
+   * DRF levait `max_decimal_places`. La vente partait en 400 APRÈS que le
+   * ticket était imprimé.
+   */
+  it("envoie une part vrac fractionnaire au millième, jamais le résidu flottant", () => {
+    const mixte = { ...gros, quantity: 24.3, packageQuantity: 2 };
+    const p = buildSalePayload({ ...base, lines: [mixte] });
+    expect(p.items[0].loose_quantity).toBe(0.3);
+    expect(JSON.stringify(p.items[0])).not.toContain("0.3000000");
+  });
+
   it("convertit chaque prix dans la devise de facture", () => {
     const p = buildSalePayload({ ...base, lines: [gros], invoiceCurrency: "USD" });
     expect(p.currency).toBe("USD");

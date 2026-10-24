@@ -25,6 +25,7 @@ export {
   formatBare,
   formatPoints,
   formatQuantity,
+  formatQuantityWithUnit,
   deaccent,
   type CurrencyOverride,
   type CurrencyOverrides,

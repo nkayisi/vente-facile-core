@@ -17,7 +17,7 @@
  *   serveur le fera à partir de ce qu'on lui envoie. Convertir le total agrégé
  *   donnerait un autre chiffre, et c'est celui-là que le client paie.
  */
-import { getPackaging, type PackagedProductLike } from "../packaging";
+import { getPackaging, roundQuantity, type PackagedProductLike } from "../packaging";
 import { r2, type CurrencyTable } from "./money";
 
 export interface BasketProduct extends PackagedProductLike {
@@ -68,11 +68,28 @@ export function packagingFactorOf(product: BasketProduct): number | null {
   return getPackaging(product)?.factor ?? null;
 }
 
-/** Part de la ligne vendue à l'unité : dérivée, jamais stockée. */
+/**
+ * Part de la ligne vendue à l'unité : dérivée, jamais stockée.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ LA SOUSTRACTION SE QUANTISE, ET CE N'EST PAS DE LA COSMÉTIQUE.           │
+ * │                                                                          │
+ * │ `verifierAjout` quantise déjà le total : une ligne de 2 contenants plus   │
+ * │ 0,3 unité à facteur 12 porte `quantity = 24,3`. La soustraction nue      │
+ * │ `24,3 - 24` rend alors `0.3000000000000007`, qui partait tel quel dans   │
+ * │ `buildSalePayload` sous `loose_quantity`, dont le serializer est un      │
+ * │ `DecimalField(max_digits=15, decimal_places=3)` : DRF lève               │
+ * │ `max_decimal_places`, et la vente est REFUSÉE après que le ticket est    │
+ * │ sorti et que le client est parti.                                        │
+ * │                                                                          │
+ * │ C'était la seule dérivation de quantité du module à ne pas passer par    │
+ * │ `roundQuantity`.                                                         │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
 export function looseQuantityOf(line: BasketLine): number {
   const factor = packagingFactorOf(line.product);
   if (!factor || !line.packageQuantity) return line.quantity;
-  return line.quantity - line.packageQuantity * factor;
+  return roundQuantity(line.quantity - line.packageQuantity * factor);
 }
 
 const num = (v: string | number | null | undefined): number => {

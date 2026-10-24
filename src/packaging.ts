@@ -55,6 +55,33 @@ export function formatQuantity(n: number): string {
   return formatNumberFr(n, QUANTITY_DECIMALS);
 }
 
+/**
+ * Une quantité avec son unité accordée : « 0,5 kg », « 10 PIECES », « 1 paquet ».
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ C'EST LE SEUL ENDROIT OÙ UNE QUANTITÉ SE COLLE À SON UNITÉ.              │
+ * │                                                                          │
+ * │ Cette fonction interpolait `count` BRUT. Elle rendait donc « 0.5 kg » au │
+ * │ point anglais, et « 0.3000000000000007 bouteilles » dès qu'une part vrac │
+ * │ était dérivée d'un total quantisé. Une soixantaine de sites des deux     │
+ * │ surfaces écrivaient la même forme à la main, et chacun pouvait dériver   │
+ * │ de son côté.                                                             │
+ * │                                                                          │
+ * │ Elle vit ici et non dans `units.ts` parce que `formatQuantity` est ici : │
+ * │ `packaging.ts` importe `pluralizeUnit` de `units.ts`, donc l'inverse     │
+ * │ ferait un cycle. `index.ts` réexporte les deux modules par `export *`,   │
+ * │ l'API publique ne bouge pas.                                             │
+ * │                                                                          │
+ * │ ⚠ ELLE NE DOIT JAMAIS ATTEINDRE UN DOCUMENT IMPRIMÉ. Son séparateur de  │
+ * │ milliers est l'espace fine insécable, que la police helvetica de jsPDF   │
+ * │ rend en « / ». Le papier a son propre helper :                           │
+ * │ `receipt.formatQuantityWithUnit`.                                        │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+export function formatUnitQuantity(count: number, word: string): string {
+  return `${formatQuantity(count)} ${pluralizeUnit(word, count)}`.trim();
+}
+
 export interface PackagedProductLike {
   selling_mode?: string | null;
   units_per_package?: number | null;

@@ -333,9 +333,6 @@ function pluralizeUnit(word, count) {
   const enCapitales = mot === mot.toUpperCase() && /[A-ZÀ-Ÿ]/.test(mot);
   return `${mot}${enCapitales ? "S" : "s"}`;
 }
-function formatUnitQuantity(count, word) {
-  return `${count} ${pluralizeUnit(word, count)}`.trim();
-}
 
 // src/packaging.ts
 var QUANTITY_DECIMALS = 3;
@@ -349,6 +346,9 @@ function roundQuantity(n) {
 }
 function formatQuantity(n) {
   return formatNumberFr(n, QUANTITY_DECIMALS);
+}
+function formatUnitQuantity(count, word) {
+  return `${formatQuantity(count)} ${pluralizeUnit(word, count)}`.trim();
 }
 function getPackaging(product) {
   if (!product) return null;
@@ -590,6 +590,7 @@ __export(receipt_exports, {
   formatMoney: () => formatMoney,
   formatPoints: () => formatPoints2,
   formatQuantity: () => formatQuantity2,
+  formatQuantityWithUnit: () => formatQuantityWithUnit,
   leading: () => leading,
   leadingOf: () => leadingOf,
   orgHeaderBlocks: () => orgHeaderBlocks,
@@ -675,8 +676,12 @@ function formatPoints2(points) {
 function formatQuantity2(quantity) {
   const n = typeof quantity === "string" ? parseFloat(quantity) : quantity;
   const safe = Number.isFinite(n) ? n : 0;
-  const rounded = Math.round(safe * 1e3) / 1e3;
-  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+  return String(Math.round(safe * 1e3) / 1e3);
+}
+function formatQuantityWithUnit(quantity, word) {
+  const n = typeof quantity === "string" ? parseFloat(quantity) : quantity;
+  const safe = Number.isFinite(n) ? n : 0;
+  return `${formatQuantity2(safe)} ${pluralizeUnit(word, safe)}`.trim();
 }
 function deaccent(text) {
   return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -1246,7 +1251,7 @@ function packagingFactorOf(product) {
 function looseQuantityOf(line) {
   const factor = packagingFactorOf(line.product);
   if (!factor || !line.packageQuantity) return line.quantity;
-  return line.quantity - line.packageQuantity * factor;
+  return roundQuantity(line.quantity - line.packageQuantity * factor);
 }
 var num = (v) => {
   const n = typeof v === "string" ? parseFloat(v) : Number(v ?? 0);
@@ -1603,7 +1608,7 @@ function verifierAjout(product, lines2, saisie) {
 function lignesEnRupture(lines2) {
   const ruptures = [];
   lines2.forEach((ligne, index) => {
-    if (ligne.quantity < 1) return;
+    if (ligne.quantity < MIN_QUANTITY) return;
     const autres = lines2.filter((_, i) => i !== index);
     const verdict = verifierAjout(ligne.product, autres, {
       packages: ligne.packageQuantity,

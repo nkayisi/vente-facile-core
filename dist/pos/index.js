@@ -27,7 +27,8 @@ import {
   totalInSaleCurrency,
   totauxParDevise,
   verifierAjout
-} from "../chunk-6FOPZG2J.js";
+} from "../chunk-W5XWEVTI.js";
+import "../chunk-OYOUHUM6.js";
 import "../chunk-PZ5AY32C.js";
 export {
   MONEY_EPS,

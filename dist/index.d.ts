@@ -1,5 +1,5 @@
-export { C as ChannelAvailability, a as CurrencyFallback, b as CurrencyInfo, c as CurrencyTable, M as MAX_QUANTITY, d as MIN_QUANTITY, e as MONEY_EPS, f as MoneyHelpers, O as OrganizationCurrency, g as OrganizationCurrencyLike, P as PackagedProductLike, h as Packaging, Q as QUANTITY_DECIMALS, i as QUANTITY_INTEGER_DIGITS, S as StockCounters, j as availableBase, k as availableSplit, l as createCurrencyTable, m as createMoneyHelpers, n as formatPackaged, o as formatPackagedDifference, p as formatPackagedSplit, q as formatQuantity, r as getPackaging, s as pos, t as r2, u as remainingChannels, v as roundQuantity, w as splitPackaged, x as toBaseQuantity } from './index-JG4qbaKK.js';
-export { i as receipt } from './index-Bk89erBd.js';
+export { C as ChannelAvailability, a as CurrencyFallback, b as CurrencyInfo, c as CurrencyTable, M as MAX_QUANTITY, d as MIN_QUANTITY, e as MONEY_EPS, f as MoneyHelpers, O as OrganizationCurrency, g as OrganizationCurrencyLike, P as PackagedProductLike, h as Packaging, Q as QUANTITY_DECIMALS, i as QUANTITY_INTEGER_DIGITS, S as StockCounters, j as availableBase, k as availableSplit, l as createCurrencyTable, m as createMoneyHelpers, n as formatPackaged, o as formatPackagedDifference, p as formatPackagedSplit, q as formatQuantity, r as formatUnitQuantity, s as getPackaging, t as pos, u as r2, v as remainingChannels, w as roundQuantity, x as splitPackaged, y as toBaseQuantity } from './index-D9uu2pi0.js';
+export { i as receipt } from './index-BXvpnwxz.js';
 
 /**
  * Formatage français, sans `Intl`.
@@ -148,10 +148,6 @@ declare function getCurrencyName(code: string): string;
  * produit. On suit donc la casse du mot d'origine.
  */
 declare function pluralizeUnit(word: string, count: number): string;
-/**
- * Formate une quantité avec son unité accordée : « 10 PIECES », « 1 paquet ».
- */
-declare function formatUnitQuantity(count: number, word: string): string;
 
 /**
  * Arithmétique des prix, gros et détail.
@@ -307,4 +303,4 @@ declare function daysLate(dueDate?: string | null): number;
 /** Libellé court : « En retard de 5 j », « Échoit dans 3 j », « Échoit aujourd'hui ». */
 declare function dueDateLabel(dueDate?: string | null): string | null;
 
-export { type CurrencyOption, LIBELLES_VERROU_PERIMETRE, type ManageableRole, type Margin, type MotifVerrouPerimetre, NNBSP, ROLE_HIERARCHY, ROLE_LABELS, type Role, SUPPORTED_CURRENCIES, type UserPermissions, blendedUnitCost, canManageRole, choixEntrepotRecevable, computeMargin, daysLate, dueDateLabel, formatDate, formatDateFr, formatDateTime, formatDateTimeFr, formatDecimal, formatFixedFr, formatNumber, formatNumberFr, formatPercent, formatPoints, formatPrice, formatPriceValue, formatTimeFr, formatUnitQuantity, getCurrencyByCode, getCurrencyName, getCurrencySymbol, getDefaultCurrency, hasAllPermissions, hasAnyPermission, hasPermission, isAtLeastRole, isOverdue, isRole, monthLong, monthShort, packageEquivalent, pluralizeUnit, retailEquivalent, setDefaultCurrency, verrouEntrepot, weekdayLong };
+export { type CurrencyOption, LIBELLES_VERROU_PERIMETRE, type ManageableRole, type Margin, type MotifVerrouPerimetre, NNBSP, ROLE_HIERARCHY, ROLE_LABELS, type Role, SUPPORTED_CURRENCIES, type UserPermissions, blendedUnitCost, canManageRole, choixEntrepotRecevable, computeMargin, daysLate, dueDateLabel, formatDate, formatDateFr, formatDateTime, formatDateTimeFr, formatDecimal, formatFixedFr, formatNumber, formatNumberFr, formatPercent, formatPoints, formatPrice, formatPriceValue, formatTimeFr, getCurrencyByCode, getCurrencyName, getCurrencySymbol, getDefaultCurrency, hasAllPermissions, hasAnyPermission, hasPermission, isAtLeastRole, isOverdue, isRole, monthLong, monthShort, packageEquivalent, pluralizeUnit, retailEquivalent, setDefaultCurrency, verrouEntrepot, weekdayLong };

@@ -121,6 +121,29 @@ describe("Lignes en rupture", () => {
     expect(lignesEnRupture([ligne(savon, 0)])).toEqual([]);
   });
 
+  it("CONTRÔLE une ligne sous l'unité, au lieu de la sauter", () => {
+    // ┌────────────────────────────────────────────────────────────────────┐
+    // │ LE SEUIL ÉTAIT À 1, ET IL OUVRAIT L'ENCAISSEMENT.                  │
+    // │                                                                    │
+    // │ Une ligne de 0,5 kg n'était JAMAIS vérifiée contre le stock : elle │
+    // │ sortait de la boucle avant `verifierAjout`. Le panier se déclarait  │
+    // │ servable, le ticket de vente s'imprimait, et le serveur refusait la │
+    // │ vente, client déjà parti. C'est l'invariant même que cette suite    │
+    // │ existe pour tenir.                                                 │
+    // └────────────────────────────────────────────────────────────────────┘
+    const farine = { ...savon, id: "p7", name: "Farine", unit_name: "kg", stock_quantity: 0.2 };
+    const ruptures = lignesEnRupture([ligne(farine, 0.5)]);
+    expect(ruptures).toHaveLength(1);
+    expect(ruptures[0].raison).toContain("0,2");
+    expect(panierServable([ligne(farine, 0.5)])).toBe(false);
+  });
+
+  it("laisse passer un demi-kilo que le stock couvre", () => {
+    // Le symétrique du cas ci-dessus : contrôler n'est pas refuser.
+    const farine = { ...savon, id: "p8", stock_quantity: 3 };
+    expect(lignesEnRupture([ligne(farine, 0.5)])).toEqual([]);
+  });
+
   it("rend le panier vide encaissable", () => {
     expect(panierServable([])).toBe(true);
   });

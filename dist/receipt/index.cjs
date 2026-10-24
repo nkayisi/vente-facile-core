@@ -36,6 +36,7 @@ __export(receipt_exports, {
   formatMoney: () => formatMoney,
   formatPoints: () => formatPoints,
   formatQuantity: () => formatQuantity,
+  formatQuantityWithUnit: () => formatQuantityWithUnit,
   leading: () => leading,
   leadingOf: () => leadingOf,
   orgHeaderBlocks: () => orgHeaderBlocks,
@@ -121,6 +122,16 @@ function getCurrencyByCode(code) {
   return SUPPORTED_CURRENCIES.find((c) => c.code === code);
 }
 
+// src/units.ts
+function pluralizeUnit(word, count) {
+  const mot = (word || "").trim();
+  if (!mot) return "";
+  if (Math.abs(count) < 2) return mot;
+  if (/[sxz]$/i.test(mot)) return mot;
+  const enCapitales = mot === mot.toUpperCase() && /[A-ZÀ-Ÿ]/.test(mot);
+  return `${mot}${enCapitales ? "S" : "s"}`;
+}
+
 // src/receipt/money.ts
 function decimalsOf(code, overrides) {
   const override = overrides?.[code]?.decimals;
@@ -152,8 +163,12 @@ function formatPoints(points) {
 function formatQuantity(quantity) {
   const n = typeof quantity === "string" ? parseFloat(quantity) : quantity;
   const safe = Number.isFinite(n) ? n : 0;
-  const rounded = Math.round(safe * 1e3) / 1e3;
-  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+  return String(Math.round(safe * 1e3) / 1e3);
+}
+function formatQuantityWithUnit(quantity, word) {
+  const n = typeof quantity === "string" ? parseFloat(quantity) : quantity;
+  const safe = Number.isFinite(n) ? n : 0;
+  return `${formatQuantity(safe)} ${pluralizeUnit(word, safe)}`.trim();
 }
 function deaccent(text) {
   return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -700,6 +715,7 @@ function buildExpenseReceipt(data) {
   formatMoney,
   formatPoints,
   formatQuantity,
+  formatQuantityWithUnit,
   leading,
   leadingOf,
   orgHeaderBlocks,

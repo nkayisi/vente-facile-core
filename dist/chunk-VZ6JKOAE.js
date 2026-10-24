@@ -1,4 +1,7 @@
 import {
+  pluralizeUnit
+} from "./chunk-OYOUHUM6.js";
+import {
   __export
 } from "./chunk-PZ5AY32C.js";
 
@@ -21,6 +24,7 @@ __export(receipt_exports, {
   formatMoney: () => formatMoney,
   formatPoints: () => formatPoints,
   formatQuantity: () => formatQuantity,
+  formatQuantityWithUnit: () => formatQuantityWithUnit,
   leading: () => leading,
   leadingOf: () => leadingOf,
   orgHeaderBlocks: () => orgHeaderBlocks,
@@ -144,8 +148,12 @@ function formatPoints(points) {
 function formatQuantity(quantity) {
   const n = typeof quantity === "string" ? parseFloat(quantity) : quantity;
   const safe = Number.isFinite(n) ? n : 0;
-  const rounded = Math.round(safe * 1e3) / 1e3;
-  return Number.isInteger(rounded) ? String(rounded) : String(rounded);
+  return String(Math.round(safe * 1e3) / 1e3);
+}
+function formatQuantityWithUnit(quantity, word) {
+  const n = typeof quantity === "string" ? parseFloat(quantity) : quantity;
+  const safe = Number.isFinite(n) ? n : 0;
+  return `${formatQuantity(safe)} ${pluralizeUnit(word, safe)}`.trim();
 }
 function deaccent(text) {
   return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -692,6 +700,7 @@ export {
   formatBare,
   formatPoints,
   formatQuantity,
+  formatQuantityWithUnit,
   deaccent,
   orgHeaderBlocks,
   footerBlocks,
@@ -703,4 +712,4 @@ export {
   buildExpenseReceipt,
   receipt_exports
 };
-//# sourceMappingURL=chunk-5FPR34OT.js.map
+//# sourceMappingURL=chunk-VZ6JKOAE.js.map

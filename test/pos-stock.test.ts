@@ -10,6 +10,7 @@ import {
   addableChannels,
   addableSealed,
   verifierAjout,
+  looseQuantityOf,
   totauxParDevise,
   createCurrencyTable,
   type BasketLine,
@@ -221,6 +222,27 @@ describe("Quantités fractionnaires", () => {
     expect(v.ok).toBe(false);
     expect(v.raison).toContain("0,5");
     expect(v.raison).not.toContain("0.5");
+  });
+
+  /**
+   * ⚠ LE DÉFAUT QUI FAISAIT REFUSER LA VENTE APRÈS L'IMPRESSION DU TICKET.
+   *
+   * `verifierAjout` quantise le total, donc la ligne porte `24.3`. La part
+   * vrac, elle, se DÉRIVE par soustraction : nue, elle rendait
+   * `0.3000000000000007`, seize décimales là où le serializer en accepte
+   * trois. `toBe` et non `toBeCloseTo` : c'est l'égalité exacte qui est en
+   * jeu, une tolérance passerait sur le défaut.
+   */
+  it("dérive une part vrac que le serveur accepte, au millième exact", () => {
+    const ligne = {
+      product: casier,
+      quantity: verifierAjout(casier, [], { packages: 2, loose: 0.3 }).quantity,
+      packageQuantity: 2,
+      unit_price: 5000,
+      discount_percentage: 0,
+    };
+    expect(ligne.quantity).toBe(24.3);
+    expect(looseQuantityOf(ligne)).toBe(0.3);
   });
 });
 

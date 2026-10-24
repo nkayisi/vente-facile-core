@@ -31,7 +31,6 @@ import {
   getPackaging,
   monthLong,
   monthShort,
-  pluralizeUnit,
   pos_exports,
   r2,
   remainingChannels,
@@ -40,14 +39,17 @@ import {
   splitPackaged,
   toBaseQuantity,
   weekdayLong
-} from "./chunk-6FOPZG2J.js";
+} from "./chunk-W5XWEVTI.js";
 import {
   SUPPORTED_CURRENCIES,
   getCurrencyByCode,
   getCurrencyName,
   getCurrencySymbol,
   receipt_exports
-} from "./chunk-5FPR34OT.js";
+} from "./chunk-VZ6JKOAE.js";
+import {
+  pluralizeUnit
+} from "./chunk-OYOUHUM6.js";
 import "./chunk-PZ5AY32C.js";
 
 // src/pricing.ts

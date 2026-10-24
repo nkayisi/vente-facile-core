@@ -153,6 +153,30 @@ declare const MIN_QUANTITY: number;
 declare function roundQuantity(n: number): number;
 /** Une quantité telle qu'elle s'écrit au comptoir : « 1 500,5 », jamais « 1500.5 ». */
 declare function formatQuantity(n: number): string;
+/**
+ * Une quantité avec son unité accordée : « 0,5 kg », « 10 PIECES », « 1 paquet ».
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ C'EST LE SEUL ENDROIT OÙ UNE QUANTITÉ SE COLLE À SON UNITÉ.              │
+ * │                                                                          │
+ * │ Cette fonction interpolait `count` BRUT. Elle rendait donc « 0.5 kg » au │
+ * │ point anglais, et « 0.3000000000000007 bouteilles » dès qu'une part vrac │
+ * │ était dérivée d'un total quantisé. Une soixantaine de sites des deux     │
+ * │ surfaces écrivaient la même forme à la main, et chacun pouvait dériver   │
+ * │ de son côté.                                                             │
+ * │                                                                          │
+ * │ Elle vit ici et non dans `units.ts` parce que `formatQuantity` est ici : │
+ * │ `packaging.ts` importe `pluralizeUnit` de `units.ts`, donc l'inverse     │
+ * │ ferait un cycle. `index.ts` réexporte les deux modules par `export *`,   │
+ * │ l'API publique ne bouge pas.                                             │
+ * │                                                                          │
+ * │ ⚠ ELLE NE DOIT JAMAIS ATTEINDRE UN DOCUMENT IMPRIMÉ. Son séparateur de  │
+ * │ milliers est l'espace fine insécable, que la police helvetica de jsPDF   │
+ * │ rend en « / ». Le papier a son propre helper :                           │
+ * │ `receipt.formatQuantityWithUnit`.                                        │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+declare function formatUnitQuantity(count: number, word: string): string;
 interface PackagedProductLike {
     selling_mode?: string | null;
     units_per_package?: number | null;
@@ -324,7 +348,24 @@ interface BasketLine {
 }
 /** Contenu d'un conditionnement, ou `null` si le produit se vend à l'unité. */
 declare function packagingFactorOf(product: BasketProduct): number | null;
-/** Part de la ligne vendue à l'unité : dérivée, jamais stockée. */
+/**
+ * Part de la ligne vendue à l'unité : dérivée, jamais stockée.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ LA SOUSTRACTION SE QUANTISE, ET CE N'EST PAS DE LA COSMÉTIQUE.           │
+ * │                                                                          │
+ * │ `verifierAjout` quantise déjà le total : une ligne de 2 contenants plus   │
+ * │ 0,3 unité à facteur 12 porte `quantity = 24,3`. La soustraction nue      │
+ * │ `24,3 - 24` rend alors `0.3000000000000007`, qui partait tel quel dans   │
+ * │ `buildSalePayload` sous `loose_quantity`, dont le serializer est un      │
+ * │ `DecimalField(max_digits=15, decimal_places=3)` : DRF lève               │
+ * │ `max_decimal_places`, et la vente est REFUSÉE après que le ticket est    │
+ * │ sorti et que le client est parti.                                        │
+ * │                                                                          │
+ * │ C'était la seule dérivation de quantité du module à ne pas passer par    │
+ * │ `roundQuantity`.                                                         │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
 declare function looseQuantityOf(line: BasketLine): number;
 /**
  * Montant brut d'une ligne, en devise principale.
@@ -785,4 +826,4 @@ declare namespace index {
   export { type index_BasketInput as BasketInput, type index_BasketLine as BasketLine, type index_BasketProduct as BasketProduct, type index_BasketTotals as BasketTotals, type index_CreditCustomerLike as CreditCustomerLike, type index_CreditVerdict as CreditVerdict, type index_CurrencyFallback as CurrencyFallback, type index_CurrencyTable as CurrencyTable, type index_LigneStockee as LigneStockee, type index_LoyaltyProgramLike as LoyaltyProgramLike, index_MONEY_EPS as MONEY_EPS, type index_OrganizationCurrencyLike as OrganizationCurrencyLike, type index_Rupture as Rupture, type index_Saisie as Saisie, type index_SaleCurrencyInput as SaleCurrencyInput, type index_SaleCurrencyLine as SaleCurrencyLine, type index_SaleCurrencyTotals as SaleCurrencyTotals, type index_SaleItemPayload as SaleItemPayload, type index_SalePayload as SalePayload, type index_SalePayloadInput as SalePayloadInput, type index_SalePaymentPayload as SalePaymentPayload, type index_SaleTender as SaleTender, type index_StockedProductLike as StockedProductLike, type index_TenderLike as TenderLike, type index_TotalParDevise as TotalParDevise, type index_VerdictAjout as VerdictAjout, index_addableBase as addableBase, index_addableChannels as addableChannels, index_addableLoose as addableLoose, index_addableSealed as addableSealed, index_basketTotals as basketTotals, index_buildSalePayload as buildSalePayload, index_createCurrencyTable as createCurrencyTable, index_evaluateCredit as evaluateCredit, index_inCart as inCart, index_lignesEnRupture as lignesEnRupture, index_lineGross as lineGross, index_looseQuantityOf as looseQuantityOf, index_loyaltyDiscount as loyaltyDiscount, index_maxGlobalDiscount as maxGlobalDiscount, index_maxLoyaltyAmount as maxLoyaltyAmount, index_maxUsablePoints as maxUsablePoints, index_minPointsToRedeem as minPointsToRedeem, index_packagingFactorOf as packagingFactorOf, index_panierServable as panierServable, index_pointValue as pointValue, index_r2 as r2, index_roundPoints as roundPoints, index_saleCurrencyTotals as saleCurrencyTotals, index_tendersIn as tendersIn, index_totalInSaleCurrency as totalInSaleCurrency, index_totauxParDevise as totauxParDevise, index_verifierAjout as verifierAjout };
 }
 
-export { addableChannels as $, type BasketTotals as A, type BasketInput as B, type ChannelAvailability as C, type CreditCustomerLike as D, type CreditVerdict as E, type LoyaltyProgramLike as F, type Saisie as G, type SaleCurrencyInput as H, type SaleCurrencyLine as I, type SaleCurrencyTotals as J, type SaleItemPayload as K, type LigneStockee as L, MAX_QUANTITY as M, type SalePayload as N, type OrganizationCurrency as O, type PackagedProductLike as P, QUANTITY_DECIMALS as Q, type Rupture as R, type StockCounters as S, type SalePayloadInput as T, type SalePaymentPayload as U, type SaleTender as V, type StockedProductLike as W, type TenderLike as X, type TotalParDevise as Y, type VerdictAjout as Z, addableBase as _, type CurrencyFallback as a, addableLoose as a0, addableSealed as a1, basketTotals as a2, buildSalePayload as a3, evaluateCredit as a4, inCart as a5, lignesEnRupture as a6, lineGross as a7, looseQuantityOf as a8, loyaltyDiscount as a9, maxGlobalDiscount as aa, maxLoyaltyAmount as ab, maxUsablePoints as ac, minPointsToRedeem as ad, packagingFactorOf as ae, panierServable as af, pointValue as ag, roundPoints as ah, saleCurrencyTotals as ai, tendersIn as aj, totalInSaleCurrency as ak, totauxParDevise as al, verifierAjout as am, type CurrencyInfo as b, type CurrencyTable as c, MIN_QUANTITY as d, MONEY_EPS as e, type MoneyHelpers as f, type OrganizationCurrencyLike as g, type Packaging as h, QUANTITY_INTEGER_DIGITS as i, availableBase as j, availableSplit as k, createCurrencyTable as l, createMoneyHelpers as m, formatPackaged as n, formatPackagedDifference as o, formatPackagedSplit as p, formatQuantity as q, getPackaging as r, index as s, r2 as t, remainingChannels as u, roundQuantity as v, splitPackaged as w, toBaseQuantity as x, type BasketLine as y, type BasketProduct as z };
+export { addableBase as $, type BasketProduct as A, type BasketInput as B, type ChannelAvailability as C, type BasketTotals as D, type CreditCustomerLike as E, type CreditVerdict as F, type LoyaltyProgramLike as G, type Saisie as H, type SaleCurrencyInput as I, type SaleCurrencyLine as J, type SaleCurrencyTotals as K, type LigneStockee as L, MAX_QUANTITY as M, type SaleItemPayload as N, type OrganizationCurrency as O, type PackagedProductLike as P, QUANTITY_DECIMALS as Q, type Rupture as R, type StockCounters as S, type SalePayload as T, type SalePayloadInput as U, type SalePaymentPayload as V, type SaleTender as W, type StockedProductLike as X, type TenderLike as Y, type TotalParDevise as Z, type VerdictAjout as _, type CurrencyFallback as a, addableChannels as a0, addableLoose as a1, addableSealed as a2, basketTotals as a3, buildSalePayload as a4, evaluateCredit as a5, inCart as a6, lignesEnRupture as a7, lineGross as a8, looseQuantityOf as a9, loyaltyDiscount as aa, maxGlobalDiscount as ab, maxLoyaltyAmount as ac, maxUsablePoints as ad, minPointsToRedeem as ae, packagingFactorOf as af, panierServable as ag, pointValue as ah, roundPoints as ai, saleCurrencyTotals as aj, tendersIn as ak, totalInSaleCurrency as al, totauxParDevise as am, verifierAjout as an, type CurrencyInfo as b, type CurrencyTable as c, MIN_QUANTITY as d, MONEY_EPS as e, type MoneyHelpers as f, type OrganizationCurrencyLike as g, type Packaging as h, QUANTITY_INTEGER_DIGITS as i, availableBase as j, availableSplit as k, createCurrencyTable as l, createMoneyHelpers as m, formatPackaged as n, formatPackagedDifference as o, formatPackagedSplit as p, formatQuantity as q, formatUnitQuantity as r, getPackaging as s, index as t, r2 as u, remainingChannels as v, roundQuantity as w, splitPackaged as x, toBaseQuantity as y, type BasketLine as z };

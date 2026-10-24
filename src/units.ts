@@ -17,10 +17,3 @@ export function pluralizeUnit(word: string, count: number): string {
   const enCapitales = mot === mot.toUpperCase() && /[A-ZÀ-Ÿ]/.test(mot);
   return `${mot}${enCapitales ? "S" : "s"}`;
 }
-
-/**
- * Formate une quantité avec son unité accordée : « 10 PIECES », « 1 paquet ».
- */
-export function formatUnitQuantity(count: number, word: string): string {
-  return `${count} ${pluralizeUnit(word, count)}`.trim();
-}
