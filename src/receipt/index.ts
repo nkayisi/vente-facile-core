@@ -23,7 +23,6 @@ export {
   formatAmount,
   formatMoney,
   formatBare,
-  formatPoints,
   formatQuantity,
   formatQuantityWithUnit,
   deaccent,

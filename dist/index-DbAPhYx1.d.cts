@@ -486,38 +486,49 @@ declare function tendersIn(tenders: TenderLike[], currencies: CurrencyTable, tar
 
 interface LoyaltyProgramLike {
     is_active?: boolean | null;
-    /** Valeur monétaire d'un point, en devise principale. */
-    point_value?: string | number | null;
-    min_points_to_redeem?: number | null;
-    /** Part de la facture réglable en points, réglée par l'organisation. */
+    /** Part de la facture reversée dans la cagnotte, en %. */
+    earn_percent?: string | number | null;
+    /** Part de la facture réglable avec la cagnotte, réglée par l'organisation. */
     max_redemption_percent?: string | number | null;
     /** Borne dure servie par le serveur ; le réglage ne peut que la durcir. */
     max_redemption_percent_ceiling?: string | number | null;
 }
-/** Les points se comptent au centième, toujours par défaut : jamais arrondi au-dessus. */
-declare function roundPoints(value: number): number;
-/** Valeur monétaire d'un point, en devise principale. Jamais nulle. */
-declare function pointValue(program?: LoyaltyProgramLike | null): number;
-declare function minPointsToRedeem(program?: LoyaltyProgramLike | null): number;
 /**
- * Part de la facture réglable en points, en devise principale.
+ * Part de la facture réglable avec la cagnotte, en devise principale.
  *
- * Les points ne soldent JAMAIS tout : il reste toujours un montant à encaisser
+ * La cagnotte ne solde JAMAIS tout : il reste toujours un montant à encaisser
  * en monnaie. Un programme réglé à 100 % rend le plafond inopérant.
  *
  * `grossTotal` est volontairement le total BRUT : c'est lui qui plafonne le
- * nombre de points saisissables, un total déjà net rendrait le calcul circulaire.
+ * montant saisissable, un total déjà net rendrait le calcul circulaire.
  */
 declare function maxLoyaltyAmount(grossTotal: number, program?: LoyaltyProgramLike | null): number;
-/** Plus grand nombre de points saisissable : borné par le solde ET par le programme. */
-declare function maxUsablePoints(grossTotal: number, pointsBalance: number, program?: LoyaltyProgramLike | null): number;
 /**
- * Remise obtenue en réglant une part de la vente en points, en devise principale.
- *
- * Le minimum du programme est appliqué ici comme côté serveur : une saisie en
- * dessous ne donne AUCUNE remise, elle n'est pas simplement ignorée.
+ * Plus grande part de cagnotte employable : bornée par le solde ET par le
+ * programme.
  */
-declare function loyaltyDiscount(grossTotal: number, pointsToUse: number, program?: LoyaltyProgramLike | null): number;
+declare function maxUsableCredit(grossTotal: number, balance: number, program?: LoyaltyProgramLike | null): number;
+/**
+ * Remise obtenue en réglant une part de la vente avec la cagnotte, en devise
+ * principale.
+ *
+ * ⚠ IL N'Y A PLUS DE MINIMUM. `min_points_to_redeem` existait parce qu'un
+ * point n'avait pas de valeur lisible ; un montant en a une, et refuser une
+ * remise de 300 FC « parce qu'elle est trop petite » n'a aucun sens au
+ * comptoir.
+ */
+declare function loyaltyDiscount(grossTotal: number, creditToUse: number, program?: LoyaltyProgramLike | null): number;
+/**
+ * Cagnotte gagnée sur une facture, en devise principale.
+ *
+ * Miroir de `LoyaltyProgram.credit_for`. Le pourcentage est CONTINU : on
+ * n'arrondit que la monnaie.
+ *
+ * ⚠ `grossTotal` DOIT ÊTRE EN DEVISE PRINCIPALE. La cagnotte y est libellée ;
+ * une facture en devise secondaire se ramène d'abord à la principale par son
+ * taux FIGÉ, jamais par celui du jour.
+ */
+declare function loyaltyEarned(grossTotal: number, program?: LoyaltyProgramLike | null): number;
 
 interface CreditCustomerLike {
     name?: string | null;
@@ -553,9 +564,10 @@ paidInPrimary: number, formatMoney?: (amount: number) => string): CreditVerdict 
  * cesse de reposer sur la vigilance de qui touchera l'un des deux écrans.
  *
  * On n'envoie que la SAISIE du caissier : quantités, prix unitaires, remises,
- * points. Aucun total n'est transmis. Le serveur totalise, plafonne les points,
- * contrôle le crédit et décrémente le stock ; c'est lui l'autorité, et les
- * calculs de `basket.ts` ne servent qu'à annoncer d'avance ce qu'il fera.
+ * cagnotte. Aucun total n'est transmis. Le serveur totalise, plafonne la
+ * cagnotte, contrôle le crédit et décrémente le stock ; c'est lui l'autorité,
+ * et les calculs de `basket.ts` ne servent qu'à annoncer d'avance ce qu'il
+ * fera.
  */
 
 interface SaleTender {
@@ -585,7 +597,8 @@ interface SalePayloadInput {
     /** Échéance, seulement si le caissier en a fixé une sur une vente à crédit. */
     dueDate?: string | null;
     loyaltyProgram?: LoyaltyProgramLike | null;
-    pointsToUse?: number;
+    /** Part de cagnotte employée, en devise PRINCIPALE. */
+    loyaltyToUse?: number;
     isPos?: boolean;
 }
 interface SaleItemPayload {
@@ -620,7 +633,7 @@ interface SalePayload {
     is_pos: boolean;
     items: SaleItemPayload[];
     payments: SalePaymentPayload[];
-    points_used?: number;
+    loyalty_amount_used?: number;
 }
 declare function buildSalePayload(input: SalePayloadInput): SalePayload;
 
@@ -808,22 +821,20 @@ declare const index_lignesEnRupture: typeof lignesEnRupture;
 declare const index_lineGross: typeof lineGross;
 declare const index_looseQuantityOf: typeof looseQuantityOf;
 declare const index_loyaltyDiscount: typeof loyaltyDiscount;
+declare const index_loyaltyEarned: typeof loyaltyEarned;
 declare const index_maxGlobalDiscount: typeof maxGlobalDiscount;
 declare const index_maxLoyaltyAmount: typeof maxLoyaltyAmount;
-declare const index_maxUsablePoints: typeof maxUsablePoints;
-declare const index_minPointsToRedeem: typeof minPointsToRedeem;
+declare const index_maxUsableCredit: typeof maxUsableCredit;
 declare const index_packagingFactorOf: typeof packagingFactorOf;
 declare const index_panierServable: typeof panierServable;
-declare const index_pointValue: typeof pointValue;
 declare const index_r2: typeof r2;
-declare const index_roundPoints: typeof roundPoints;
 declare const index_saleCurrencyTotals: typeof saleCurrencyTotals;
 declare const index_tendersIn: typeof tendersIn;
 declare const index_totalInSaleCurrency: typeof totalInSaleCurrency;
 declare const index_totauxParDevise: typeof totauxParDevise;
 declare const index_verifierAjout: typeof verifierAjout;
 declare namespace index {
-  export { type index_BasketInput as BasketInput, type index_BasketLine as BasketLine, type index_BasketProduct as BasketProduct, type index_BasketTotals as BasketTotals, type index_CreditCustomerLike as CreditCustomerLike, type index_CreditVerdict as CreditVerdict, type index_CurrencyFallback as CurrencyFallback, type index_CurrencyTable as CurrencyTable, type index_LigneStockee as LigneStockee, type index_LoyaltyProgramLike as LoyaltyProgramLike, index_MONEY_EPS as MONEY_EPS, type index_OrganizationCurrencyLike as OrganizationCurrencyLike, type index_Rupture as Rupture, type index_Saisie as Saisie, type index_SaleCurrencyInput as SaleCurrencyInput, type index_SaleCurrencyLine as SaleCurrencyLine, type index_SaleCurrencyTotals as SaleCurrencyTotals, type index_SaleItemPayload as SaleItemPayload, type index_SalePayload as SalePayload, type index_SalePayloadInput as SalePayloadInput, type index_SalePaymentPayload as SalePaymentPayload, type index_SaleTender as SaleTender, type index_StockedProductLike as StockedProductLike, type index_TenderLike as TenderLike, type index_TotalParDevise as TotalParDevise, type index_VerdictAjout as VerdictAjout, index_addableBase as addableBase, index_addableChannels as addableChannels, index_addableLoose as addableLoose, index_addableSealed as addableSealed, index_basketTotals as basketTotals, index_buildSalePayload as buildSalePayload, index_createCurrencyTable as createCurrencyTable, index_evaluateCredit as evaluateCredit, index_inCart as inCart, index_lignesEnRupture as lignesEnRupture, index_lineGross as lineGross, index_looseQuantityOf as looseQuantityOf, index_loyaltyDiscount as loyaltyDiscount, index_maxGlobalDiscount as maxGlobalDiscount, index_maxLoyaltyAmount as maxLoyaltyAmount, index_maxUsablePoints as maxUsablePoints, index_minPointsToRedeem as minPointsToRedeem, index_packagingFactorOf as packagingFactorOf, index_panierServable as panierServable, index_pointValue as pointValue, index_r2 as r2, index_roundPoints as roundPoints, index_saleCurrencyTotals as saleCurrencyTotals, index_tendersIn as tendersIn, index_totalInSaleCurrency as totalInSaleCurrency, index_totauxParDevise as totauxParDevise, index_verifierAjout as verifierAjout };
+  export { type index_BasketInput as BasketInput, type index_BasketLine as BasketLine, type index_BasketProduct as BasketProduct, type index_BasketTotals as BasketTotals, type index_CreditCustomerLike as CreditCustomerLike, type index_CreditVerdict as CreditVerdict, type index_CurrencyFallback as CurrencyFallback, type index_CurrencyTable as CurrencyTable, type index_LigneStockee as LigneStockee, type index_LoyaltyProgramLike as LoyaltyProgramLike, index_MONEY_EPS as MONEY_EPS, type index_OrganizationCurrencyLike as OrganizationCurrencyLike, type index_Rupture as Rupture, type index_Saisie as Saisie, type index_SaleCurrencyInput as SaleCurrencyInput, type index_SaleCurrencyLine as SaleCurrencyLine, type index_SaleCurrencyTotals as SaleCurrencyTotals, type index_SaleItemPayload as SaleItemPayload, type index_SalePayload as SalePayload, type index_SalePayloadInput as SalePayloadInput, type index_SalePaymentPayload as SalePaymentPayload, type index_SaleTender as SaleTender, type index_StockedProductLike as StockedProductLike, type index_TenderLike as TenderLike, type index_TotalParDevise as TotalParDevise, type index_VerdictAjout as VerdictAjout, index_addableBase as addableBase, index_addableChannels as addableChannels, index_addableLoose as addableLoose, index_addableSealed as addableSealed, index_basketTotals as basketTotals, index_buildSalePayload as buildSalePayload, index_createCurrencyTable as createCurrencyTable, index_evaluateCredit as evaluateCredit, index_inCart as inCart, index_lignesEnRupture as lignesEnRupture, index_lineGross as lineGross, index_looseQuantityOf as looseQuantityOf, index_loyaltyDiscount as loyaltyDiscount, index_loyaltyEarned as loyaltyEarned, index_maxGlobalDiscount as maxGlobalDiscount, index_maxLoyaltyAmount as maxLoyaltyAmount, index_maxUsableCredit as maxUsableCredit, index_packagingFactorOf as packagingFactorOf, index_panierServable as panierServable, index_r2 as r2, index_saleCurrencyTotals as saleCurrencyTotals, index_tendersIn as tendersIn, index_totalInSaleCurrency as totalInSaleCurrency, index_totauxParDevise as totauxParDevise, index_verifierAjout as verifierAjout };
 }
 
-export { addableBase as $, type BasketProduct as A, type BasketInput as B, type ChannelAvailability as C, type BasketTotals as D, type CreditCustomerLike as E, type CreditVerdict as F, type LoyaltyProgramLike as G, type Saisie as H, type SaleCurrencyInput as I, type SaleCurrencyLine as J, type SaleCurrencyTotals as K, type LigneStockee as L, MAX_QUANTITY as M, type SaleItemPayload as N, type OrganizationCurrency as O, type PackagedProductLike as P, QUANTITY_DECIMALS as Q, type Rupture as R, type StockCounters as S, type SalePayload as T, type SalePayloadInput as U, type SalePaymentPayload as V, type SaleTender as W, type StockedProductLike as X, type TenderLike as Y, type TotalParDevise as Z, type VerdictAjout as _, type CurrencyFallback as a, addableChannels as a0, addableLoose as a1, addableSealed as a2, basketTotals as a3, buildSalePayload as a4, evaluateCredit as a5, inCart as a6, lignesEnRupture as a7, lineGross as a8, looseQuantityOf as a9, loyaltyDiscount as aa, maxGlobalDiscount as ab, maxLoyaltyAmount as ac, maxUsablePoints as ad, minPointsToRedeem as ae, packagingFactorOf as af, panierServable as ag, pointValue as ah, roundPoints as ai, saleCurrencyTotals as aj, tendersIn as ak, totalInSaleCurrency as al, totauxParDevise as am, verifierAjout as an, type CurrencyInfo as b, type CurrencyTable as c, MIN_QUANTITY as d, MONEY_EPS as e, type MoneyHelpers as f, type OrganizationCurrencyLike as g, type Packaging as h, QUANTITY_INTEGER_DIGITS as i, availableBase as j, availableSplit as k, createCurrencyTable as l, createMoneyHelpers as m, formatPackaged as n, formatPackagedDifference as o, formatPackagedSplit as p, formatQuantity as q, formatUnitQuantity as r, getPackaging as s, index as t, r2 as u, remainingChannels as v, roundQuantity as w, splitPackaged as x, toBaseQuantity as y, type BasketLine as z };
+export { addableBase as $, type BasketProduct as A, type BasketInput as B, type ChannelAvailability as C, type BasketTotals as D, type CreditCustomerLike as E, type CreditVerdict as F, type LoyaltyProgramLike as G, type Saisie as H, type SaleCurrencyInput as I, type SaleCurrencyLine as J, type SaleCurrencyTotals as K, type LigneStockee as L, MAX_QUANTITY as M, type SaleItemPayload as N, type OrganizationCurrency as O, type PackagedProductLike as P, QUANTITY_DECIMALS as Q, type Rupture as R, type StockCounters as S, type SalePayload as T, type SalePayloadInput as U, type SalePaymentPayload as V, type SaleTender as W, type StockedProductLike as X, type TenderLike as Y, type TotalParDevise as Z, type VerdictAjout as _, type CurrencyFallback as a, addableChannels as a0, addableLoose as a1, addableSealed as a2, basketTotals as a3, buildSalePayload as a4, evaluateCredit as a5, inCart as a6, lignesEnRupture as a7, lineGross as a8, looseQuantityOf as a9, loyaltyDiscount as aa, loyaltyEarned as ab, maxGlobalDiscount as ac, maxLoyaltyAmount as ad, maxUsableCredit as ae, packagingFactorOf as af, panierServable as ag, saleCurrencyTotals as ah, tendersIn as ai, totalInSaleCurrency as aj, totauxParDevise as ak, verifierAjout as al, type CurrencyInfo as b, type CurrencyTable as c, MIN_QUANTITY as d, MONEY_EPS as e, type MoneyHelpers as f, type OrganizationCurrencyLike as g, type Packaging as h, QUANTITY_INTEGER_DIGITS as i, availableBase as j, availableSplit as k, createCurrencyTable as l, createMoneyHelpers as m, formatPackaged as n, formatPackagedDifference as o, formatPackagedSplit as p, formatQuantity as q, formatUnitQuantity as r, getPackaging as s, index as t, r2 as u, remainingChannels as v, roundQuantity as w, splitPackaged as x, toBaseQuantity as y, type BasketLine as z };

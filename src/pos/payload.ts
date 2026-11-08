@@ -8,9 +8,10 @@
  * cesse de reposer sur la vigilance de qui touchera l'un des deux écrans.
  *
  * On n'envoie que la SAISIE du caissier : quantités, prix unitaires, remises,
- * points. Aucun total n'est transmis. Le serveur totalise, plafonne les points,
- * contrôle le crédit et décrémente le stock ; c'est lui l'autorité, et les
- * calculs de `basket.ts` ne servent qu'à annoncer d'avance ce qu'il fera.
+ * cagnotte. Aucun total n'est transmis. Le serveur totalise, plafonne la
+ * cagnotte, contrôle le crédit et décrémente le stock ; c'est lui l'autorité,
+ * et les calculs de `basket.ts` ne servent qu'à annoncer d'avance ce qu'il
+ * fera.
  */
 import { packagingFactorOf, looseQuantityOf, type BasketLine } from "./basket";
 import { loyaltyDiscount, type LoyaltyProgramLike } from "./loyalty";
@@ -41,7 +42,8 @@ export interface SalePayloadInput {
   /** Échéance, seulement si le caissier en a fixé une sur une vente à crédit. */
   dueDate?: string | null;
   loyaltyProgram?: LoyaltyProgramLike | null;
-  pointsToUse?: number;
+  /** Part de cagnotte employée, en devise PRINCIPALE. */
+  loyaltyToUse?: number;
   isPos?: boolean;
 }
 
@@ -79,7 +81,7 @@ export interface SalePayload {
   is_pos: boolean;
   items: SaleItemPayload[];
   payments: SalePaymentPayload[];
-  points_used?: number;
+  loyalty_amount_used?: number;
 }
 
 const num = (v: string | number | null | undefined): number => {
@@ -91,7 +93,7 @@ export function buildSalePayload(input: SalePayloadInput): SalePayload {
   const {
     lines, currencies, invoiceCurrency, changeCurrency,
     globalDiscountAmount = 0, tenders, register, warehouse, customer,
-    isCredit = false, dueDate, loyaltyProgram, pointsToUse = 0, isPos = true,
+    isCredit = false, dueDate, loyaltyProgram, loyaltyToUse = 0, isPos = true,
   } = input;
   const primary = currencies.primary;
   const cur = invoiceCurrency;
@@ -142,7 +144,7 @@ export function buildSalePayload(input: SalePayloadInput): SalePayload {
     }));
 
   const { total, globalDiscount } = basketTotals({ lines, globalDiscountAmount });
-  const discount = loyaltyDiscount(total, pointsToUse, loyaltyProgram);
+  const discount = loyaltyDiscount(total, loyaltyToUse, loyaltyProgram);
 
   return {
     register,
@@ -158,9 +160,10 @@ export function buildSalePayload(input: SalePayloadInput): SalePayload {
     is_pos: isPos,
     items,
     payments,
-    // Points utilisés. Le serveur plafonne et convertit lui-même. On n'envoie
-    // rien quand l'écran n'annonce aucune remise (saisie sous le minimum du
-    // programme) : le corps doit dire exactement ce que le caissier a vu.
-    ...(discount > 0 ? { points_used: pointsToUse } : {}),
+    // Part de cagnotte employée, en devise PRINCIPALE. Le serveur plafonne et
+    // convertit lui-même. On envoie la remise RETENUE et non la saisie brute :
+    // le corps doit dire exactement ce que le caissier a vu, et `loyaltyToUse`
+    // peut dépasser le plafond que `loyaltyDiscount` vient d'appliquer.
+    ...(discount > 0 ? { loyalty_amount_used: discount } : {}),
   };
 }

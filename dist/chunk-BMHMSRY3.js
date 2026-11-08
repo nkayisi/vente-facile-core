@@ -22,15 +22,13 @@ __export(pos_exports, {
   lineGross: () => lineGross,
   looseQuantityOf: () => looseQuantityOf,
   loyaltyDiscount: () => loyaltyDiscount,
+  loyaltyEarned: () => loyaltyEarned,
   maxGlobalDiscount: () => maxGlobalDiscount,
   maxLoyaltyAmount: () => maxLoyaltyAmount,
-  maxUsablePoints: () => maxUsablePoints,
-  minPointsToRedeem: () => minPointsToRedeem,
+  maxUsableCredit: () => maxUsableCredit,
   packagingFactorOf: () => packagingFactorOf,
   panierServable: () => panierServable,
-  pointValue: () => pointValue,
   r2: () => r2,
-  roundPoints: () => roundPoints,
   saleCurrencyTotals: () => saleCurrencyTotals,
   tendersIn: () => tendersIn,
   totalInSaleCurrency: () => totalInSaleCurrency,
@@ -441,16 +439,6 @@ function tendersIn(tenders, currencies, target) {
 }
 
 // src/pos/loyalty.ts
-function roundPoints(value) {
-  return Math.floor(value * 100) / 100;
-}
-function pointValue(program) {
-  const v = program?.point_value != null ? Number(program.point_value) : 1;
-  return Number.isFinite(v) && v > 0 ? v : 1;
-}
-function minPointsToRedeem(program) {
-  return program?.min_points_to_redeem ?? 100;
-}
 function maxLoyaltyAmount(grossTotal, program) {
   const ceiling = Number(program?.max_redemption_percent_ceiling);
   const safeCeiling = Number.isFinite(ceiling) && ceiling > 0 ? ceiling : 70;
@@ -458,16 +446,19 @@ function maxLoyaltyAmount(grossTotal, program) {
   const safePct = Number.isFinite(pct) && pct > 0 ? Math.min(pct, safeCeiling) : safeCeiling;
   return r2(grossTotal * safePct / 100);
 }
-function maxUsablePoints(grossTotal, pointsBalance, program) {
-  return Math.min(
-    pointsBalance,
-    roundPoints(maxLoyaltyAmount(grossTotal, program) / pointValue(program))
-  );
+function maxUsableCredit(grossTotal, balance, program) {
+  return r2(Math.min(Math.max(balance, 0), maxLoyaltyAmount(grossTotal, program)));
 }
-function loyaltyDiscount(grossTotal, pointsToUse, program) {
-  if (!program?.is_active || pointsToUse <= 0) return 0;
-  if (pointsToUse < minPointsToRedeem(program)) return 0;
-  return r2(Math.min(pointsToUse * pointValue(program), maxLoyaltyAmount(grossTotal, program)));
+function loyaltyDiscount(grossTotal, creditToUse, program) {
+  if (!program?.is_active || creditToUse <= 0) return 0;
+  return r2(Math.min(creditToUse, maxLoyaltyAmount(grossTotal, program)));
+}
+function loyaltyEarned(grossTotal, program) {
+  if (!program?.is_active) return 0;
+  const pct = Number(program?.earn_percent);
+  if (!Number.isFinite(pct) || pct <= 0) return 0;
+  if (!(grossTotal > 0)) return 0;
+  return r2(grossTotal * pct / 100);
 }
 
 // src/format.ts
@@ -514,11 +505,6 @@ function formatDate(dateStr) {
 function formatDateTime(dateStr) {
   return formatDateTimeFr(new Date(dateStr));
 }
-function formatPoints(points) {
-  const n = typeof points === "string" ? parseFloat(points) : points ?? 0;
-  if (!Number.isFinite(n)) return "0";
-  return formatNumberFr(n, 2);
-}
 
 // src/pos/credit.ts
 var num2 = (v) => {
@@ -564,7 +550,7 @@ function buildSalePayload(input) {
     isCredit = false,
     dueDate,
     loyaltyProgram,
-    pointsToUse = 0,
+    loyaltyToUse = 0,
     isPos = true
   } = input;
   const primary = currencies.primary;
@@ -600,7 +586,7 @@ function buildSalePayload(input) {
     ...t.reference ? { reference: t.reference } : {}
   }));
   const { total, globalDiscount } = basketTotals({ lines, globalDiscountAmount });
-  const discount = loyaltyDiscount(total, pointsToUse, loyaltyProgram);
+  const discount = loyaltyDiscount(total, loyaltyToUse, loyaltyProgram);
   return {
     register,
     ...warehouse ? { warehouse } : {},
@@ -615,10 +601,11 @@ function buildSalePayload(input) {
     is_pos: isPos,
     items,
     payments,
-    // Points utilisés. Le serveur plafonne et convertit lui-même. On n'envoie
-    // rien quand l'écran n'annonce aucune remise (saisie sous le minimum du
-    // programme) : le corps doit dire exactement ce que le caissier a vu.
-    ...discount > 0 ? { points_used: pointsToUse } : {}
+    // Part de cagnotte employée, en devise PRINCIPALE. Le serveur plafonne et
+    // convertit lui-même. On envoie la remise RETENUE et non la saisie brute :
+    // le corps doit dire exactement ce que le caissier a vu, et `loyaltyToUse`
+    // peut dépasser le plafond que `loyaltyDiscount` vient d'appliquer.
+    ...discount > 0 ? { loyalty_amount_used: discount } : {}
   };
 }
 
@@ -744,7 +731,6 @@ export {
   formatPercent,
   formatDate,
   formatDateTime,
-  formatPoints,
   MONEY_EPS,
   r2,
   createCurrencyTable,
@@ -774,12 +760,10 @@ export {
   totauxParDevise,
   totalInSaleCurrency,
   tendersIn,
-  roundPoints,
-  pointValue,
-  minPointsToRedeem,
   maxLoyaltyAmount,
-  maxUsablePoints,
+  maxUsableCredit,
   loyaltyDiscount,
+  loyaltyEarned,
   evaluateCredit,
   buildSalePayload,
   inCart,
@@ -792,4 +776,4 @@ export {
   panierServable,
   pos_exports
 };
-//# sourceMappingURL=chunk-WSP3AMKW.js.map
+//# sourceMappingURL=chunk-BMHMSRY3.js.map

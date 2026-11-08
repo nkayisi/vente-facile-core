@@ -101,19 +101,3 @@ export function formatDate(dateStr: string): string {
 export function formatDateTime(dateStr: string): string {
   return formatDateTimeFr(new Date(dateStr));
 }
-
-/**
- * Formate un nombre de points de fidélité.
- *
- * Les points sont fractionnaires depuis qu'un barème en pourcentage sur une
- * devise forte peut produire 0,58 point : les tronquer les faisait disparaître.
- * On affiche donc la fraction quand elle existe, et rien de plus quand le
- * compte tombe juste : « 3 pts », jamais « 3,00 pts ».
- *
- * Ex : 3 → "3" ; 0.58 → "0,58" ; 4.5 → "4,5" ; 1234.25 → "1 234,25"
- */
-export function formatPoints(points: number | string | null | undefined): string {
-  const n = typeof points === "string" ? parseFloat(points) : points ?? 0;
-  if (!Number.isFinite(n)) return "0";
-  return formatNumberFr(n, 2);
-}

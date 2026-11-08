@@ -13,21 +13,19 @@ import {
   lineGross,
   looseQuantityOf,
   loyaltyDiscount,
+  loyaltyEarned,
   maxGlobalDiscount,
   maxLoyaltyAmount,
-  maxUsablePoints,
-  minPointsToRedeem,
+  maxUsableCredit,
   packagingFactorOf,
   panierServable,
-  pointValue,
   r2,
-  roundPoints,
   saleCurrencyTotals,
   tendersIn,
   totalInSaleCurrency,
   totauxParDevise,
   verifierAjout
-} from "../chunk-WSP3AMKW.js";
+} from "../chunk-BMHMSRY3.js";
 import "../chunk-B5W4KJNN.js";
 import "../chunk-PZ5AY32C.js";
 export {
@@ -45,15 +43,13 @@ export {
   lineGross,
   looseQuantityOf,
   loyaltyDiscount,
+  loyaltyEarned,
   maxGlobalDiscount,
   maxLoyaltyAmount,
-  maxUsablePoints,
-  minPointsToRedeem,
+  maxUsableCredit,
   packagingFactorOf,
   panierServable,
-  pointValue,
   r2,
-  roundPoints,
   saleCurrencyTotals,
   tendersIn,
   totalInSaleCurrency,

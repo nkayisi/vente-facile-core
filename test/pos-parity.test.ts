@@ -19,10 +19,10 @@ import {
   tendersIn,
   lineGross,
   maxLoyaltyAmount,
-  maxUsablePoints,
+  maxUsableCredit,
   loyaltyDiscount,
   evaluateCredit,
-  roundPoints,
+  loyaltyEarned,
   type BasketLine,
   type OrganizationCurrencyLike,
 } from "../src/pos/index";
@@ -39,9 +39,8 @@ function legacy(
   invoiceCurrency: string,
   globalDiscountAmount: number,
   program: any,
-  pointsToUse: number,
-  usePoints: boolean,
-  minPts: number,
+  creditToUse: number,
+  useCredit: boolean,
   tenders: { currency: string; amount: string }[]
 ) {
   const defaultCurrency = { code: "CDF", decimal_places: 2 };
@@ -78,10 +77,6 @@ function legacy(
   const calculateTotal = () =>
     r2(calculateSubtotal() - calculateItemDiscount() - calculateGlobalDiscountAmount() + calculateTax());
 
-  const pointValue = () => {
-    const v = program?.point_value ? parseFloat(program.point_value) : 1;
-    return v > 0 ? v : 1;
-  };
   const maxLoyaltyAmountL = () => {
     const ceiling = Number(program?.max_redemption_percent_ceiling);
     const safeCeiling = Number.isFinite(ceiling) && ceiling > 0 ? ceiling : 70;
@@ -90,9 +85,8 @@ function legacy(
     return r2((calculateTotal() * safePct) / 100);
   };
   const calculateLoyaltyDiscount = () => {
-    if (!usePoints || pointsToUse <= 0 || !program?.is_active) return 0;
-    if (pointsToUse < minPts) return 0;
-    return r2(Math.min(pointsToUse * pointValue(), maxLoyaltyAmountL()));
+    if (!useCredit || creditToUse <= 0 || !program?.is_active) return 0;
+    return r2(Math.min(creditToUse, maxLoyaltyAmountL()));
   };
 
   const getPrimaryCurrency = () => orgCurrencies.find((c) => c.is_primary);
@@ -257,27 +251,27 @@ describe("POS : l'extraction n'a rien changé", () => {
       const globalDiscountAmount = rnd() < 0.7 ? 0 : Math.round(rnd() * 500000) / 100;
       const program = {
         is_active: rnd() < 0.8,
-        point_value: (Math.round(rnd() * 500) / 100 || 1).toFixed(2),
-        min_points_to_redeem: 100,
         max_redemption_percent: rnd() < 0.2 ? null : String(Math.floor(rnd() * 100)),
         max_redemption_percent_ceiling: rnd() < 0.2 ? null : 70,
       };
-      const usePoints = rnd() < 0.5;
-      const pointsToUse = Math.floor(rnd() * 5000);
+      const useCredit = rnd() < 0.5;
+      // Un MONTANT de cagnotte, pas un nombre de points : jusqu'à 50 000 en
+      // devise principale, au centime.
+      const creditToUse = Math.round(rnd() * 5_000_000) / 100;
       const tenders = [
         { currency: ["CDF", "USD", "EUR"][Math.floor(rnd() * 3)], amount: (rnd() * 1_000_000).toFixed(2) },
       ];
 
       const before = legacy(
         lines, CURRENCIES, invoiceCurrency, globalDiscountAmount,
-        program, pointsToUse, usePoints, 100, tenders
+        program, creditToUse, useCredit, tenders
       );
 
       const totals = basketTotals({ lines, globalDiscountAmount });
-      // `usePoints` est un état d'interface, pas une règle : côté paquet, ne pas
-      // vouloir de points se dit en n'en passant aucun.
-      const points = usePoints ? pointsToUse : 0;
-      const discount = loyaltyDiscount(totals.total, points, program);
+      // `useCredit` est un état d'interface, pas une règle : côté paquet, ne pas
+      // vouloir de cagnotte se dit en n'en passant aucune.
+      const credit = useCredit ? creditToUse : 0;
+      const discount = loyaltyDiscount(totals.total, credit, program);
       const after = {
         subtotal: totals.subtotal,
         itemDiscount: totals.itemDiscount,
@@ -440,22 +434,26 @@ describe("POS : les règles qui décident de l'argent", () => {
     expect(v.lines[0].gross).toBe(22);
   });
 
-  it("ne donne aucune remise sous le minimum du programme, au lieu de l'ignorer", () => {
-    const program = { is_active: true, point_value: "10", min_points_to_redeem: 100, max_redemption_percent: "50" };
-    expect(loyaltyDiscount(100000, 99, program)).toBe(0);
-    expect(loyaltyDiscount(100000, 100, program)).toBe(1000);
+  it("n'oppose plus aucun minimum : une petite cagnotte se dépense", () => {
+    // ⚠ CE TEST AFFIRMAIT L'INVERSE. `min_points_to_redeem` existait parce
+    // qu'un point n'avait pas de valeur lisible ; un montant en a une, et
+    // refuser 99 FC de remise « parce que c'est trop peu » n'a aucun sens au
+    // comptoir. Le minimum a disparu avec les points.
+    const program = { is_active: true, max_redemption_percent: "50" };
+    expect(loyaltyDiscount(100000, 99, program)).toBe(99);
+    expect(loyaltyDiscount(100000, 1000, program)).toBe(1000);
   });
 
-  it("plafonne les points à la part réglable, jamais à la facture entière", () => {
-    const program = { is_active: true, point_value: "10", min_points_to_redeem: 1, max_redemption_percent: "50" };
-    // 10 000 points valent 100 000, mais la moitié de la facture seulement est réglable.
-    expect(loyaltyDiscount(100000, 10000, program)).toBe(50000);
-    expect(maxUsablePoints(100000, 10000, program)).toBe(5000);
+  it("plafonne la cagnotte à la part réglable, jamais à la facture entière", () => {
+    const program = { is_active: true, max_redemption_percent: "50" };
+    // La cagnotte couvrirait tout, mais la moitié de la facture seulement est réglable.
+    expect(loyaltyDiscount(100000, 100000, program)).toBe(50000);
+    expect(maxUsableCredit(100000, 100000, program)).toBe(50000);
   });
 
   it("retombe sur la borne dure, jamais sur zéro, quand le réglage est illisible", () => {
-    // Une lecture ratée ne doit pas interdire au caissier d'utiliser les points :
-    // le serveur reste l'autorité et tranchera.
+    // Une lecture ratée ne doit pas interdire au caissier d'employer la
+    // cagnotte : le serveur reste l'autorité et tranchera.
     expect(maxLoyaltyAmount(100000, { max_redemption_percent: null })).toBe(70000);
     expect(maxLoyaltyAmount(100000, { max_redemption_percent: "abc" })).toBe(70000);
     // Le réglage de l'organisation ne peut que DURCIR la borne.
@@ -486,9 +484,18 @@ describe("POS : les règles qui décident de l'argent", () => {
     expect(evaluateCredit({ name: "K" }, 500000, 700000)!.creditInPrimary).toBe(0);
   });
 
-  it("compte les points par défaut, jamais au-dessus du solde réel", () => {
-    expect(roundPoints(4.999)).toBe(4.99);
-    expect(maxUsablePoints(1e9, 250, { is_active: true, point_value: "1" })).toBe(250);
+  it("ne propose jamais plus que le solde réel, ni un solde négatif", () => {
+    expect(maxUsableCredit(1e9, 250, { is_active: true })).toBe(250);
+    // Un solde négatif - le temps d'une correction - ne devient pas une remise.
+    expect(maxUsableCredit(1e9, -40, { is_active: true })).toBe(0);
+  });
+
+  it("rend la cagnotte gagnée au pourcentage du programme", () => {
+    // Miroir de `LoyaltyProgram.credit_for` : continu, jamais par tranches.
+    expect(loyaltyEarned(10_000, { is_active: true, earn_percent: "2" })).toBe(200);
+    expect(loyaltyEarned(58, { is_active: true, earn_percent: "1" })).toBe(0.58);
+    // Un programme inactif ne crédite rien, même avec un pourcentage réglé.
+    expect(loyaltyEarned(10_000, { is_active: false, earn_percent: "2" })).toBe(0);
   });
 
   it("survit à un taux de change nul plutôt que de diviser par zéro", () => {

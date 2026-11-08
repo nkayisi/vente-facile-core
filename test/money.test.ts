@@ -13,7 +13,6 @@ import {
   formatAmount,
   formatBare,
   formatMoney,
-  formatPoints,
   formatQuantity,
   symbolOf,
 } from "../src/receipt/money";
@@ -64,22 +63,6 @@ describe("formatAmount", () => {
 
   it("formatBare omet le symbole", () => {
     expect(formatBare(1_250_036.4, "CDF")).toBe("1 250 036");
-  });
-});
-
-describe("points de fidélité", () => {
-  it("garde la fraction quand elle existe, et rien du tout sinon", () => {
-    expect(formatPoints(3)).toBe("3");
-    expect(formatPoints(0.58)).toBe("0.58");
-    expect(formatPoints(null)).toBe("0");
-  });
-
-  it("complète à deux décimales dès que la fraction existe", () => {
-    // DIVERGENCE ASSUMÉE avec `format.ts`, qui rend « 4,5 » à l'écran là où le
-    // ticket imprime « 4.50 ». Les deux fonctions portent le même nom et ne
-    // rendent pas la même chose. Comportement actuel du web, figé ici tel quel :
-    // l'aligner change ce qui sort du papier, ce n'est pas une extraction.
-    expect(formatPoints(4.5)).toBe("4.50");
   });
 });
 

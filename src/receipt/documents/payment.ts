@@ -147,7 +147,7 @@ export function buildPaymentReceipt(data: PaymentReceiptData): Block[] {
     },
 
     ...debtBlocks(data.debt, data.currencyOverrides),
-    ...loyaltyBlocks(data.loyalty),
+    ...loyaltyBlocks(data.loyalty, data.currencyOverrides),
 
     data.notes && { kind: "space", size: "sm" },
     data.notes && {

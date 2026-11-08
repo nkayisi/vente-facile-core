@@ -250,7 +250,7 @@ export function buildSaleReceipt(data: SaleReceiptData): Block[] {
       },
 
     ...(isProforma ? [] : debtBlocks(data.debt, data.currencyOverrides)),
-    ...(isProforma ? [] : loyaltyBlocks(data.loyalty)),
+    ...(isProforma ? [] : loyaltyBlocks(data.loyalty, data.currencyOverrides)),
 
     ...footerBlocks(
       // Une proforma n'est pas un reçu : son pied ne doit pas pouvoir être

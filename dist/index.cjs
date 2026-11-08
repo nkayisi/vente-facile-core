@@ -52,7 +52,6 @@ __export(index_exports, {
   formatPackagedDifference: () => formatPackagedDifference,
   formatPackagedSplit: () => formatPackagedSplit,
   formatPercent: () => formatPercent,
-  formatPoints: () => formatPoints,
   formatPrice: () => formatPrice,
   formatPriceValue: () => formatPriceValue,
   formatQuantity: () => formatQuantity,
@@ -210,11 +209,6 @@ function formatDate(dateStr) {
 }
 function formatDateTime(dateStr) {
   return formatDateTimeFr(new Date(dateStr));
-}
-function formatPoints(points) {
-  const n = typeof points === "string" ? parseFloat(points) : points ?? 0;
-  if (!Number.isFinite(n)) return "0";
-  return formatNumberFr(n, 2);
 }
 
 // src/currencies.ts
@@ -623,7 +617,6 @@ __export(receipt_exports, {
   formatAmount: () => formatAmount,
   formatBare: () => formatBare,
   formatMoney: () => formatMoney,
-  formatPoints: () => formatPoints2,
   formatQuantity: () => formatQuantity2,
   formatQuantityWithUnit: () => formatQuantityWithUnit,
   leading: () => leading,
@@ -701,12 +694,6 @@ function formatMoney(amount, code, overrides) {
 }
 function formatBare(amount, code, overrides) {
   return formatAmount(amount, decimalsOf(code, overrides));
-}
-function formatPoints2(points) {
-  const n = points ?? 0;
-  if (!Number.isFinite(n)) return "0";
-  const rounded = Math.round(n * 100) / 100;
-  return Number.isInteger(rounded) ? String(rounded) : formatAmount(rounded, 2);
 }
 function formatQuantity2(quantity) {
   const n = typeof quantity === "string" ? parseFloat(quantity) : quantity;
@@ -859,20 +846,22 @@ function showsLoyalty(loyalty) {
   if (!loyalty?.show) return false;
   return (loyalty.earned ?? 0) > 0 || (loyalty.used ?? 0) > 0 || loyalty.balance !== void 0;
 }
-function loyaltyBlocks(loyalty) {
+function loyaltyBlocks(loyalty, overrides) {
   if (!showsLoyalty(loyalty) || !loyalty) return [];
+  const code = loyalty.currency;
+  const sou = (v) => code ? formatMoney(v ?? 0, code, overrides) : formatAmount(v ?? 0, 2);
   const rows = compact([
     (loyalty.earned ?? 0) > 0 && {
-      label: "Points gagn\xE9s",
-      value: `+${formatPoints2(loyalty.earned)} pts`
+      label: "Cagnotte gagn\xE9e",
+      value: `+${sou(loyalty.earned)}`
     },
     (loyalty.used ?? 0) > 0 && {
-      label: "Points utilis\xE9s",
-      value: `-${formatPoints2(loyalty.used)} pts`
+      label: "Cagnotte utilis\xE9e",
+      value: `-${sou(loyalty.used)}`
     },
     loyalty.balance !== void 0 && {
-      label: "Solde de points",
-      value: `${formatPoints2(loyalty.balance)} pts`,
+      label: "Cagnotte disponible",
+      value: sou(loyalty.balance),
       strong: true
     }
   ]);
@@ -1032,7 +1021,7 @@ function buildSaleReceipt(data) {
       role: "body"
     },
     ...isProforma ? [] : debtBlocks(data.debt, data.currencyOverrides),
-    ...isProforma ? [] : loyaltyBlocks(data.loyalty),
+    ...isProforma ? [] : loyaltyBlocks(data.loyalty, data.currencyOverrides),
     ...footerBlocks(
       // Une proforma n'est pas un reçu : son pied ne doit pas pouvoir être
       // remplacé par le message de remerciement configuré pour les ventes.
@@ -1124,7 +1113,7 @@ function buildPaymentReceipt(data) {
       value: money(data.amountPaid, data.currency)
     },
     ...debtBlocks(data.debt, data.currencyOverrides),
-    ...loyaltyBlocks(data.loyalty),
+    ...loyaltyBlocks(data.loyalty, data.currencyOverrides),
     data.notes && { kind: "space", size: "sm" },
     data.notes && {
       kind: "text",
@@ -1263,15 +1252,13 @@ __export(pos_exports, {
   lineGross: () => lineGross,
   looseQuantityOf: () => looseQuantityOf,
   loyaltyDiscount: () => loyaltyDiscount,
+  loyaltyEarned: () => loyaltyEarned,
   maxGlobalDiscount: () => maxGlobalDiscount,
   maxLoyaltyAmount: () => maxLoyaltyAmount,
-  maxUsablePoints: () => maxUsablePoints,
-  minPointsToRedeem: () => minPointsToRedeem,
+  maxUsableCredit: () => maxUsableCredit,
   packagingFactorOf: () => packagingFactorOf,
   panierServable: () => panierServable,
-  pointValue: () => pointValue,
   r2: () => r2,
-  roundPoints: () => roundPoints,
   saleCurrencyTotals: () => saleCurrencyTotals,
   tendersIn: () => tendersIn,
   totalInSaleCurrency: () => totalInSaleCurrency,
@@ -1429,16 +1416,6 @@ function tendersIn(tenders, currencies, target) {
 }
 
 // src/pos/loyalty.ts
-function roundPoints(value) {
-  return Math.floor(value * 100) / 100;
-}
-function pointValue(program) {
-  const v = program?.point_value != null ? Number(program.point_value) : 1;
-  return Number.isFinite(v) && v > 0 ? v : 1;
-}
-function minPointsToRedeem(program) {
-  return program?.min_points_to_redeem ?? 100;
-}
 function maxLoyaltyAmount(grossTotal, program) {
   const ceiling = Number(program?.max_redemption_percent_ceiling);
   const safeCeiling = Number.isFinite(ceiling) && ceiling > 0 ? ceiling : 70;
@@ -1446,16 +1423,19 @@ function maxLoyaltyAmount(grossTotal, program) {
   const safePct = Number.isFinite(pct) && pct > 0 ? Math.min(pct, safeCeiling) : safeCeiling;
   return r2(grossTotal * safePct / 100);
 }
-function maxUsablePoints(grossTotal, pointsBalance, program) {
-  return Math.min(
-    pointsBalance,
-    roundPoints(maxLoyaltyAmount(grossTotal, program) / pointValue(program))
-  );
+function maxUsableCredit(grossTotal, balance, program) {
+  return r2(Math.min(Math.max(balance, 0), maxLoyaltyAmount(grossTotal, program)));
 }
-function loyaltyDiscount(grossTotal, pointsToUse, program) {
-  if (!program?.is_active || pointsToUse <= 0) return 0;
-  if (pointsToUse < minPointsToRedeem(program)) return 0;
-  return r2(Math.min(pointsToUse * pointValue(program), maxLoyaltyAmount(grossTotal, program)));
+function loyaltyDiscount(grossTotal, creditToUse, program) {
+  if (!program?.is_active || creditToUse <= 0) return 0;
+  return r2(Math.min(creditToUse, maxLoyaltyAmount(grossTotal, program)));
+}
+function loyaltyEarned(grossTotal, program) {
+  if (!program?.is_active) return 0;
+  const pct = Number(program?.earn_percent);
+  if (!Number.isFinite(pct) || pct <= 0) return 0;
+  if (!(grossTotal > 0)) return 0;
+  return r2(grossTotal * pct / 100);
 }
 
 // src/pos/credit.ts
@@ -1502,7 +1482,7 @@ function buildSalePayload(input) {
     isCredit = false,
     dueDate,
     loyaltyProgram,
-    pointsToUse = 0,
+    loyaltyToUse = 0,
     isPos = true
   } = input;
   const primary = currencies.primary;
@@ -1538,7 +1518,7 @@ function buildSalePayload(input) {
     ...t.reference ? { reference: t.reference } : {}
   }));
   const { total, globalDiscount } = basketTotals({ lines: lines2, globalDiscountAmount });
-  const discount = loyaltyDiscount(total, pointsToUse, loyaltyProgram);
+  const discount = loyaltyDiscount(total, loyaltyToUse, loyaltyProgram);
   return {
     register,
     ...warehouse ? { warehouse } : {},
@@ -1553,10 +1533,11 @@ function buildSalePayload(input) {
     is_pos: isPos,
     items,
     payments,
-    // Points utilisés. Le serveur plafonne et convertit lui-même. On n'envoie
-    // rien quand l'écran n'annonce aucune remise (saisie sous le minimum du
-    // programme) : le corps doit dire exactement ce que le caissier a vu.
-    ...discount > 0 ? { points_used: pointsToUse } : {}
+    // Part de cagnotte employée, en devise PRINCIPALE. Le serveur plafonne et
+    // convertit lui-même. On envoie la remise RETENUE et non la saisie brute :
+    // le corps doit dire exactement ce que le caissier a vu, et `loyaltyToUse`
+    // peut dépasser le plafond que `loyaltyDiscount` vient d'appliquer.
+    ...discount > 0 ? { loyalty_amount_used: discount } : {}
   };
 }
 
@@ -1696,7 +1677,6 @@ function panierServable(lines2) {
   formatPackagedDifference,
   formatPackagedSplit,
   formatPercent,
-  formatPoints,
   formatPrice,
   formatPriceValue,
   formatQuantity,

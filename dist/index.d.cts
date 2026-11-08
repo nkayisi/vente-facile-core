@@ -1,5 +1,5 @@
-export { C as ChannelAvailability, a as CurrencyFallback, b as CurrencyInfo, c as CurrencyTable, M as MAX_QUANTITY, d as MIN_QUANTITY, e as MONEY_EPS, f as MoneyHelpers, O as OrganizationCurrency, g as OrganizationCurrencyLike, P as PackagedProductLike, h as Packaging, Q as QUANTITY_DECIMALS, i as QUANTITY_INTEGER_DIGITS, S as StockCounters, j as availableBase, k as availableSplit, l as createCurrencyTable, m as createMoneyHelpers, n as formatPackaged, o as formatPackagedDifference, p as formatPackagedSplit, q as formatQuantity, r as formatUnitQuantity, s as getPackaging, t as pos, u as r2, v as remainingChannels, w as roundQuantity, x as splitPackaged, y as toBaseQuantity } from './index-D9uu2pi0.cjs';
-export { i as receipt } from './index-BXvpnwxz.cjs';
+export { C as ChannelAvailability, a as CurrencyFallback, b as CurrencyInfo, c as CurrencyTable, M as MAX_QUANTITY, d as MIN_QUANTITY, e as MONEY_EPS, f as MoneyHelpers, O as OrganizationCurrency, g as OrganizationCurrencyLike, P as PackagedProductLike, h as Packaging, Q as QUANTITY_DECIMALS, i as QUANTITY_INTEGER_DIGITS, S as StockCounters, j as availableBase, k as availableSplit, l as createCurrencyTable, m as createMoneyHelpers, n as formatPackaged, o as formatPackagedDifference, p as formatPackagedSplit, q as formatQuantity, r as formatUnitQuantity, s as getPackaging, t as pos, u as r2, v as remainingChannels, w as roundQuantity, x as splitPackaged, y as toBaseQuantity } from './index-DbAPhYx1.cjs';
+export { i as receipt } from './index-BpBfCD2T.cjs';
 
 /**
  * Formatage français, sans `Intl`.
@@ -104,17 +104,6 @@ declare function formatPercent(num: number | string): string;
 declare function formatDate(dateStr: string): string;
 /** Formate une date avec heure : « 28 août, 11:30 ». */
 declare function formatDateTime(dateStr: string): string;
-/**
- * Formate un nombre de points de fidélité.
- *
- * Les points sont fractionnaires depuis qu'un barème en pourcentage sur une
- * devise forte peut produire 0,58 point : les tronquer les faisait disparaître.
- * On affiche donc la fraction quand elle existe, et rien de plus quand le
- * compte tombe juste : « 3 pts », jamais « 3,00 pts ».
- *
- * Ex : 3 → "3" ; 0.58 → "0,58" ; 4.5 → "4,5" ; 1234.25 → "1 234,25"
- */
-declare function formatPoints(points: number | string | null | undefined): string;
 
 /**
  * Liste complète des devises supportées par la plateforme
@@ -295,4 +284,4 @@ declare function daysLate(dueDate?: string | null): number;
 /** Libellé court : « En retard de 5 j », « Échoit dans 3 j », « Échoit aujourd'hui ». */
 declare function dueDateLabel(dueDate?: string | null): string | null;
 
-export { type CurrencyOption, LIBELLES_VERROU_PERIMETRE, type ManageableRole, type Margin, type MotifVerrouPerimetre, NNBSP, ROLE_HIERARCHY, ROLE_LABELS, type Role, SUPPORTED_CURRENCIES, type UserPermissions, blendedUnitCost, canManageRole, choixEntrepotRecevable, computeMargin, daysLate, dueDateLabel, formatDate, formatDateFr, formatDateTime, formatDateTimeFr, formatDecimal, formatFixedFr, formatNumber, formatNumberFr, formatPercent, formatPoints, formatPrice, formatPriceValue, formatTimeFr, getCurrencyByCode, getCurrencyName, getCurrencySymbol, getDefaultCurrency, hasAllPermissions, hasAnyPermission, hasPermission, isAtLeastRole, isOverdue, isRole, monthLong, monthShort, packageEquivalent, pluralizeUnit, retailEquivalent, setDefaultCurrency, verrouEntrepot, weekdayLong };
+export { type CurrencyOption, LIBELLES_VERROU_PERIMETRE, type ManageableRole, type Margin, type MotifVerrouPerimetre, NNBSP, ROLE_HIERARCHY, ROLE_LABELS, type Role, SUPPORTED_CURRENCIES, type UserPermissions, blendedUnitCost, canManageRole, choixEntrepotRecevable, computeMargin, daysLate, dueDateLabel, formatDate, formatDateFr, formatDateTime, formatDateTimeFr, formatDecimal, formatFixedFr, formatNumber, formatNumberFr, formatPercent, formatPrice, formatPriceValue, formatTimeFr, getCurrencyByCode, getCurrencyName, getCurrencySymbol, getDefaultCurrency, hasAllPermissions, hasAnyPermission, hasPermission, isAtLeastRole, isOverdue, isRole, monthLong, monthShort, packageEquivalent, pluralizeUnit, retailEquivalent, setDefaultCurrency, verrouEntrepot, weekdayLong };

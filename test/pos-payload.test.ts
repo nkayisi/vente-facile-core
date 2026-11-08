@@ -6,7 +6,7 @@
  * surfaces envoient la même chose : c'est ce que ce fichier verrouille.
  */
 import { describe, it, expect } from "vitest";
-import { createCurrencyTable, buildSalePayload } from "../src/pos/index";
+import { basketTotals, createCurrencyTable, buildSalePayload } from "../src/pos/index";
 
 const table = createCurrencyTable(
   [
@@ -124,13 +124,26 @@ describe("Corps de la vente", () => {
     expect(p.payments[0].payment_method).toBe("m2");
   });
 
-  it("ne réclame des points que si l'écran a annoncé une remise", () => {
-    const program = { is_active: true, point_value: "10", min_points_to_redeem: 100, max_redemption_percent: "50" };
+  it("n'envoie la cagnotte que si l'écran a annoncé une remise", () => {
+    const program = { is_active: true, max_redemption_percent: "50" };
     // Saisie sous le minimum : l'écran n'annonce rien, le corps ne demande rien.
-    const sous = buildSalePayload({ ...base, lines: [detail], loyaltyProgram: program, pointsToUse: 50 });
-    expect(sous.points_used).toBeUndefined();
-    const assez = buildSalePayload({ ...base, lines: [detail], loyaltyProgram: program, pointsToUse: 100 });
-    expect(assez.points_used).toBe(100);
+    const rien = buildSalePayload({ ...base, lines: [detail], loyaltyProgram: program, loyaltyToUse: 0 });
+    expect(rien.loyalty_amount_used).toBeUndefined();
+    const avec = buildSalePayload({ ...base, lines: [detail], loyaltyProgram: program, loyaltyToUse: 100 });
+    expect(avec.loyalty_amount_used).toBe(100);
+  });
+
+  it("envoie la remise RETENUE, pas la saisie brute", () => {
+    // ⚠ CE QUI PART EST CE QUE LE CAISSIER A VU. Une saisie au-delà du plafond
+    // est rabotée par `loyaltyDiscount` à l'écran ; envoyer la saisie brute
+    // ferait que le serveur applique un autre montant que celui affiché, et le
+    // ticket déjà imprimé ne désignerait plus la facture.
+    const program = { is_active: true, max_redemption_percent: "50" };
+    const avec = buildSalePayload({
+      ...base, lines: [detail], loyaltyProgram: program, loyaltyToUse: 1_000_000,
+    });
+    const { total } = basketTotals({ lines: [detail] });
+    expect(avec.loyalty_amount_used).toBe(total / 2);
   });
 
   it("ne joint une échéance qu'à une vente à crédit", () => {

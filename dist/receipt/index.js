@@ -13,7 +13,6 @@ import {
   formatAmount,
   formatBare,
   formatMoney,
-  formatPoints,
   formatQuantity,
   formatQuantityWithUnit,
   leading,
@@ -21,7 +20,7 @@ import {
   orgHeaderBlocks,
   symbolOf,
   tokensFor
-} from "../chunk-L52ETOKJ.js";
+} from "../chunk-4RTFCMOK.js";
 import "../chunk-B5W4KJNN.js";
 import "../chunk-PZ5AY32C.js";
 export {
@@ -39,7 +38,6 @@ export {
   formatAmount,
   formatBare,
   formatMoney,
-  formatPoints,
   formatQuantity,
   formatQuantityWithUnit,
   leading,

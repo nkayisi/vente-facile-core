@@ -34,7 +34,6 @@ __export(receipt_exports, {
   formatAmount: () => formatAmount,
   formatBare: () => formatBare,
   formatMoney: () => formatMoney,
-  formatPoints: () => formatPoints,
   formatQuantity: () => formatQuantity,
   formatQuantityWithUnit: () => formatQuantityWithUnit,
   leading: () => leading,
@@ -189,12 +188,6 @@ function formatMoney(amount, code, overrides) {
 function formatBare(amount, code, overrides) {
   return formatAmount(amount, decimalsOf(code, overrides));
 }
-function formatPoints(points) {
-  const n = points ?? 0;
-  if (!Number.isFinite(n)) return "0";
-  const rounded = Math.round(n * 100) / 100;
-  return Number.isInteger(rounded) ? String(rounded) : formatAmount(rounded, 2);
-}
 function formatQuantity(quantity) {
   const n = typeof quantity === "string" ? parseFloat(quantity) : quantity;
   const safe = Number.isFinite(n) ? n : 0;
@@ -346,20 +339,22 @@ function showsLoyalty(loyalty) {
   if (!loyalty?.show) return false;
   return (loyalty.earned ?? 0) > 0 || (loyalty.used ?? 0) > 0 || loyalty.balance !== void 0;
 }
-function loyaltyBlocks(loyalty) {
+function loyaltyBlocks(loyalty, overrides) {
   if (!showsLoyalty(loyalty) || !loyalty) return [];
+  const code = loyalty.currency;
+  const sou = (v) => code ? formatMoney(v ?? 0, code, overrides) : formatAmount(v ?? 0, 2);
   const rows = compact([
     (loyalty.earned ?? 0) > 0 && {
-      label: "Points gagn\xE9s",
-      value: `+${formatPoints(loyalty.earned)} pts`
+      label: "Cagnotte gagn\xE9e",
+      value: `+${sou(loyalty.earned)}`
     },
     (loyalty.used ?? 0) > 0 && {
-      label: "Points utilis\xE9s",
-      value: `-${formatPoints(loyalty.used)} pts`
+      label: "Cagnotte utilis\xE9e",
+      value: `-${sou(loyalty.used)}`
     },
     loyalty.balance !== void 0 && {
-      label: "Solde de points",
-      value: `${formatPoints(loyalty.balance)} pts`,
+      label: "Cagnotte disponible",
+      value: sou(loyalty.balance),
       strong: true
     }
   ]);
@@ -519,7 +514,7 @@ function buildSaleReceipt(data) {
       role: "body"
     },
     ...isProforma ? [] : debtBlocks(data.debt, data.currencyOverrides),
-    ...isProforma ? [] : loyaltyBlocks(data.loyalty),
+    ...isProforma ? [] : loyaltyBlocks(data.loyalty, data.currencyOverrides),
     ...footerBlocks(
       // Une proforma n'est pas un reçu : son pied ne doit pas pouvoir être
       // remplacé par le message de remerciement configuré pour les ventes.
@@ -611,7 +606,7 @@ function buildPaymentReceipt(data) {
       value: money(data.amountPaid, data.currency)
     },
     ...debtBlocks(data.debt, data.currencyOverrides),
-    ...loyaltyBlocks(data.loyalty),
+    ...loyaltyBlocks(data.loyalty, data.currencyOverrides),
     data.notes && { kind: "space", size: "sm" },
     data.notes && {
       kind: "text",
@@ -748,7 +743,6 @@ function buildExpenseReceipt(data) {
   formatAmount,
   formatBare,
   formatMoney,
-  formatPoints,
   formatQuantity,
   formatQuantityWithUnit,
   leading,

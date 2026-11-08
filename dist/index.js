@@ -21,7 +21,6 @@ import {
   formatPackagedDifference,
   formatPackagedSplit,
   formatPercent,
-  formatPoints,
   formatPrice,
   formatPriceValue,
   formatQuantity,
@@ -39,14 +38,14 @@ import {
   splitPackaged,
   toBaseQuantity,
   weekdayLong
-} from "./chunk-WSP3AMKW.js";
+} from "./chunk-BMHMSRY3.js";
 import {
   SUPPORTED_CURRENCIES,
   getCurrencyByCode,
   getCurrencyName,
   getCurrencySymbol,
   receipt_exports
-} from "./chunk-L52ETOKJ.js";
+} from "./chunk-4RTFCMOK.js";
 import {
   pluralizeUnit
 } from "./chunk-B5W4KJNN.js";
@@ -217,7 +216,6 @@ export {
   formatPackagedDifference,
   formatPackagedSplit,
   formatPercent,
-  formatPoints,
   formatPrice,
   formatPriceValue,
   formatQuantity,

@@ -6,7 +6,7 @@
  */
 
 import { compact, type Block, type KvRow } from "../blocks";
-import { formatMoney, formatPoints, type CurrencyOverrides } from "../money";
+import { formatAmount, formatMoney, type CurrencyOverrides } from "../money";
 import {
   DOCUMENT_IDENTITIES,
   DUPLICATE_CHIP,
@@ -75,15 +75,24 @@ export interface LoyaltyData {
   earned?: number;
   used?: number;
   balance?: number;
+  /**
+   * Devise de la cagnotte : la PRINCIPALE de l'établissement.
+   *
+   * ⚠ ELLE N'EST PAS CELLE DE LA FACTURE, et la confondre imprimerait un
+   * montant faux sur le papier du client : une cagnotte de 12 500 FC rendue
+   * sous le symbole d'une facture en dollars se lirait « 12 500 $ ». Absente,
+   * le montant sort nu - c'est le moindre mal, mais l'appelant doit la passer.
+   */
+  currency?: string;
 }
 
 /**
  * Bloc fidélité.
  *
  * Il s'imprime dès qu'un programme est actif et qu'un client est rattaché, même
- * si la vente ne rapporte rien : le client vient justement lire son cumul. La
- * garde d'origine (« points gagnés > 0 ») faisait disparaître le solde sur toute
- * vente sous le seuil de gain.
+ * si la vente ne rapporte rien : le client vient justement lire sa cagnotte. La
+ * garde d'origine (« gain > 0 ») faisait disparaître le solde sur toute vente
+ * sous le seuil de gain.
  */
 export function showsLoyalty(loyalty: LoyaltyData | undefined): boolean {
   if (!loyalty?.show) return false;
@@ -94,21 +103,28 @@ export function showsLoyalty(loyalty: LoyaltyData | undefined): boolean {
   );
 }
 
-export function loyaltyBlocks(loyalty: LoyaltyData | undefined): Block[] {
+export function loyaltyBlocks(
+  loyalty: LoyaltyData | undefined,
+  overrides?: CurrencyOverrides
+): Block[] {
   if (!showsLoyalty(loyalty) || !loyalty) return [];
+
+  const code = loyalty.currency;
+  const sou = (v: number | undefined) =>
+    code ? formatMoney(v ?? 0, code, overrides) : formatAmount(v ?? 0, 2);
 
   const rows = compact<KvRow>([
     (loyalty.earned ?? 0) > 0 && {
-      label: "Points gagnés",
-      value: `+${formatPoints(loyalty.earned)} pts`,
+      label: "Cagnotte gagnée",
+      value: `+${sou(loyalty.earned)}`,
     },
     (loyalty.used ?? 0) > 0 && {
-      label: "Points utilisés",
-      value: `-${formatPoints(loyalty.used)} pts`,
+      label: "Cagnotte utilisée",
+      value: `-${sou(loyalty.used)}`,
     },
     loyalty.balance !== undefined && {
-      label: "Solde de points",
-      value: `${formatPoints(loyalty.balance)} pts`,
+      label: "Cagnotte disponible",
+      value: sou(loyalty.balance),
       strong: true,
     },
   ]);

@@ -64,20 +64,6 @@ export function formatBare(
 }
 
 /**
- * Points de fidélité.
- *
- * Fractionnaires par nature : 1 % d'un panier de 58 $ vaut 0,58 point, et
- * arrondir à l'entier revenait à ne rien créditer. On garde la fraction, mais
- * seulement quand elle existe : « 3 pts », pas « 3.00 pts ».
- */
-export function formatPoints(points: number | undefined | null): string {
-  const n = points ?? 0;
-  if (!Number.isFinite(n)) return "0";
-  const rounded = Math.round(n * 100) / 100;
-  return Number.isInteger(rounded) ? String(rounded) : formatAmount(rounded, 2);
-}
-
-/**
  * Quantité : 3 décimales possibles, mais on ne les imprime pas pour rien.
  *
  * L'arrondi au millième n'est pas décoratif : il absorbe le résidu binaire

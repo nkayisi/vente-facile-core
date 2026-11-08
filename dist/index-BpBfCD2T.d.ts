@@ -200,14 +200,6 @@ declare function formatMoney(amount: number | string, code: string, overrides?: 
 /** Montant sans devise, pour les colonnes où l'unité est déjà annoncée. */
 declare function formatBare(amount: number | string, code: string, overrides?: CurrencyOverrides): string;
 /**
- * Points de fidélité.
- *
- * Fractionnaires par nature : 1 % d'un panier de 58 $ vaut 0,58 point, et
- * arrondir à l'entier revenait à ne rien créditer. On garde la fraction, mais
- * seulement quand elle existe : « 3 pts », pas « 3.00 pts ».
- */
-declare function formatPoints(points: number | undefined | null): string;
-/**
  * Quantité : 3 décimales possibles, mais on ne les imprime pas pour rien.
  *
  * L'arrondi au millième n'est pas décoratif : il absorbe le résidu binaire
@@ -345,6 +337,15 @@ interface LoyaltyData {
     earned?: number;
     used?: number;
     balance?: number;
+    /**
+     * Devise de la cagnotte : la PRINCIPALE de l'établissement.
+     *
+     * ⚠ ELLE N'EST PAS CELLE DE LA FACTURE, et la confondre imprimerait un
+     * montant faux sur le papier du client : une cagnotte de 12 500 FC rendue
+     * sous le symbole d'une facture en dollars se lirait « 12 500 $ ». Absente,
+     * le montant sort nu - c'est le moindre mal, mais l'appelant doit la passer.
+     */
+    currency?: string;
 }
 interface DebtData {
     /** Solde du client avant l'opération, dans la devise de l'opération. */
@@ -572,7 +573,6 @@ declare const index_footerBlocks: typeof footerBlocks;
 declare const index_formatAmount: typeof formatAmount;
 declare const index_formatBare: typeof formatBare;
 declare const index_formatMoney: typeof formatMoney;
-declare const index_formatPoints: typeof formatPoints;
 declare const index_formatQuantity: typeof formatQuantity;
 declare const index_formatQuantityWithUnit: typeof formatQuantityWithUnit;
 declare const index_leading: typeof leading;
@@ -581,7 +581,7 @@ declare const index_orgHeaderBlocks: typeof orgHeaderBlocks;
 declare const index_symbolOf: typeof symbolOf;
 declare const index_tokensFor: typeof tokensFor;
 declare namespace index {
-  export { type index_AmountRow as AmountRow, type index_BaseDocumentData as BaseDocumentData, type index_Block as Block, type index_CashSessionCurrencyLine as CashSessionCurrencyLine, type index_CashSessionReceiptData as CashSessionReceiptData, type index_CurrencyOverride as CurrencyOverride, type index_CurrencyOverrides as CurrencyOverrides, index_DOCUMENT_IDENTITIES as DOCUMENT_IDENTITIES, index_DUPLICATE_CHIP as DUPLICATE_CHIP, type index_DebtData as DebtData, type index_DocumentIdentity as DocumentIdentity, type index_DocumentKind as DocumentKind, type index_ExpenseReceiptData as ExpenseReceiptData, index_FONTS as FONTS, type index_FontRole as FontRole, type index_FontSpec as FontSpec, type index_ItemRow as ItemRow, type index_KvRow as KvRow, type index_LoadedLogo as LoadedLogo, type index_LoyaltyData as LoyaltyData, type index_OrgIdentity as OrgIdentity, type index_PaperWidth as PaperWidth, type index_PaymentReceiptData as PaymentReceiptData, type index_ReceiptChrome as ReceiptChrome, type index_RuleWeight as RuleWeight, type index_SaleReceiptData as SaleReceiptData, type index_SaleReceiptItem as SaleReceiptItem, type index_SaleReceiptPayment as SaleReceiptPayment, type index_SpaceSize as SpaceSize, type index_Tokens as Tokens, index_buildCashSessionReceipt as buildCashSessionReceipt, index_buildExpenseReceipt as buildExpenseReceipt, index_buildPaymentReceipt as buildPaymentReceipt, index_buildSaleReceipt as buildSaleReceipt, index_compact as compact, index_deaccent as deaccent, index_decimalsOf as decimalsOf, index_footerBlocks as footerBlocks, index_formatAmount as formatAmount, index_formatBare as formatBare, index_formatMoney as formatMoney, index_formatPoints as formatPoints, index_formatQuantity as formatQuantity, index_formatQuantityWithUnit as formatQuantityWithUnit, index_leading as leading, index_leadingOf as leadingOf, index_orgHeaderBlocks as orgHeaderBlocks, index_symbolOf as symbolOf, index_tokensFor as tokensFor };
+  export { type index_AmountRow as AmountRow, type index_BaseDocumentData as BaseDocumentData, type index_Block as Block, type index_CashSessionCurrencyLine as CashSessionCurrencyLine, type index_CashSessionReceiptData as CashSessionReceiptData, type index_CurrencyOverride as CurrencyOverride, type index_CurrencyOverrides as CurrencyOverrides, index_DOCUMENT_IDENTITIES as DOCUMENT_IDENTITIES, index_DUPLICATE_CHIP as DUPLICATE_CHIP, type index_DebtData as DebtData, type index_DocumentIdentity as DocumentIdentity, type index_DocumentKind as DocumentKind, type index_ExpenseReceiptData as ExpenseReceiptData, index_FONTS as FONTS, type index_FontRole as FontRole, type index_FontSpec as FontSpec, type index_ItemRow as ItemRow, type index_KvRow as KvRow, type index_LoadedLogo as LoadedLogo, type index_LoyaltyData as LoyaltyData, type index_OrgIdentity as OrgIdentity, type index_PaperWidth as PaperWidth, type index_PaymentReceiptData as PaymentReceiptData, type index_ReceiptChrome as ReceiptChrome, type index_RuleWeight as RuleWeight, type index_SaleReceiptData as SaleReceiptData, type index_SaleReceiptItem as SaleReceiptItem, type index_SaleReceiptPayment as SaleReceiptPayment, type index_SpaceSize as SpaceSize, type index_Tokens as Tokens, index_buildCashSessionReceipt as buildCashSessionReceipt, index_buildExpenseReceipt as buildExpenseReceipt, index_buildPaymentReceipt as buildPaymentReceipt, index_buildSaleReceipt as buildSaleReceipt, index_compact as compact, index_deaccent as deaccent, index_decimalsOf as decimalsOf, index_footerBlocks as footerBlocks, index_formatAmount as formatAmount, index_formatBare as formatBare, index_formatMoney as formatMoney, index_formatQuantity as formatQuantity, index_formatQuantityWithUnit as formatQuantityWithUnit, index_leading as leading, index_leadingOf as leadingOf, index_orgHeaderBlocks as orgHeaderBlocks, index_symbolOf as symbolOf, index_tokensFor as tokensFor };
 }
 
-export { type AmountRow as A, type BaseDocumentData as B, type CashSessionCurrencyLine as C, DOCUMENT_IDENTITIES as D, type ExpenseReceiptData as E, FONTS as F, formatBare as G, formatMoney as H, type ItemRow as I, formatPoints as J, type KvRow as K, type LoadedLogo as L, formatQuantity as M, formatQuantityWithUnit as N, type OrgIdentity as O, type PaperWidth as P, leading as Q, type ReceiptChrome as R, type SaleReceiptData as S, type Tokens as T, leadingOf as U, orgHeaderBlocks as V, symbolOf as W, tokensFor as X, type Block as a, type CashSessionReceiptData as b, type CurrencyOverride as c, type CurrencyOverrides as d, DUPLICATE_CHIP as e, type DebtData as f, type DocumentIdentity as g, type DocumentKind as h, index as i, type FontRole as j, type FontSpec as k, type LoyaltyData as l, type PaymentReceiptData as m, type RuleWeight as n, type SaleReceiptItem as o, type SaleReceiptPayment as p, type SpaceSize as q, buildCashSessionReceipt as r, buildExpenseReceipt as s, buildPaymentReceipt as t, buildSaleReceipt as u, compact as v, deaccent as w, decimalsOf as x, footerBlocks as y, formatAmount as z };
+export { type AmountRow as A, type BaseDocumentData as B, type CashSessionCurrencyLine as C, DOCUMENT_IDENTITIES as D, type ExpenseReceiptData as E, FONTS as F, formatBare as G, formatMoney as H, type ItemRow as I, formatQuantity as J, type KvRow as K, type LoadedLogo as L, formatQuantityWithUnit as M, leading as N, type OrgIdentity as O, type PaperWidth as P, leadingOf as Q, type ReceiptChrome as R, type SaleReceiptData as S, type Tokens as T, orgHeaderBlocks as U, symbolOf as V, tokensFor as W, type Block as a, type CashSessionReceiptData as b, type CurrencyOverride as c, type CurrencyOverrides as d, DUPLICATE_CHIP as e, type DebtData as f, type DocumentIdentity as g, type DocumentKind as h, index as i, type FontRole as j, type FontSpec as k, type LoyaltyData as l, type PaymentReceiptData as m, type RuleWeight as n, type SaleReceiptItem as o, type SaleReceiptPayment as p, type SpaceSize as q, buildCashSessionReceipt as r, buildExpenseReceipt as s, buildPaymentReceipt as t, buildSaleReceipt as u, compact as v, deaccent as w, decimalsOf as x, footerBlocks as y, formatAmount as z };
