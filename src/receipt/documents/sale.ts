@@ -160,7 +160,7 @@ export function buildSaleReceipt(data: SaleReceiptData): Block[] {
       value: `-${bare(discounts.commercial)}`,
     },
     discounts.loyalty > 0 && {
-      label: "Réglé en points",
+      label: "Cagnotte fidélité",
       value: `-${bare(discounts.loyalty)}`,
     },
     data.taxAmount > 0 && {

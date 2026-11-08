@@ -947,7 +947,7 @@ function buildSaleReceipt(data) {
       value: `-${bare(discounts.commercial)}`
     },
     discounts.loyalty > 0 && {
-      label: "R\xE9gl\xE9 en points",
+      label: "Cagnotte fid\xE9lit\xE9",
       value: `-${bare(discounts.loyalty)}`
     },
     data.taxAmount > 0 && {

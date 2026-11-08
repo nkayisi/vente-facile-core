@@ -390,7 +390,7 @@ function buildSaleReceipt(data) {
       value: `-${bare(discounts.commercial)}`
     },
     discounts.loyalty > 0 && {
-      label: "R\xE9gl\xE9 en points",
+      label: "Cagnotte fid\xE9lit\xE9",
       value: `-${bare(discounts.loyalty)}`
     },
     data.taxAmount > 0 && {
@@ -706,4 +706,4 @@ export {
   buildExpenseReceipt,
   receipt_exports
 };
-//# sourceMappingURL=chunk-4RTFCMOK.js.map
+//# sourceMappingURL=chunk-HP7YTDV4.js.map
