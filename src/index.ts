@@ -14,6 +14,7 @@
 export * from "./intl-fr";
 export * from "./format";
 export * from "./currencies";
+export * from "./countries";
 export * from "./currency";
 export * from "./units";
 export * from "./packaging";

@@ -51,6 +51,57 @@ import {
 } from "./chunk-B5W4KJNN.js";
 import "./chunk-PZ5AY32C.js";
 
+// src/countries.ts
+var SUPPORTED_COUNTRIES = [
+  // Afrique centrale
+  { value: "RDC", label: "R\xE9publique d\xE9mocratique du Congo", currencies: ["CDF", "USD"] },
+  { value: "Cameroun", label: "Cameroun", currencies: ["XAF"] },
+  { value: "Congo", label: "R\xE9publique du Congo", currencies: ["XAF"] },
+  { value: "Gabon", label: "Gabon", currencies: ["XAF"] },
+  { value: "Tchad", label: "Tchad", currencies: ["XAF"] },
+  { value: "Centrafrique", label: "R\xE9publique centrafricaine", currencies: ["XAF"] },
+  { value: "Guin\xE9e \xE9quatoriale", label: "Guin\xE9e \xE9quatoriale", currencies: ["XAF"] },
+  // Afrique de l'Ouest (UEMOA)
+  { value: "S\xE9n\xE9gal", label: "S\xE9n\xE9gal", currencies: ["XOF"] },
+  { value: "C\xF4te d'Ivoire", label: "C\xF4te d'Ivoire", currencies: ["XOF"] },
+  { value: "Mali", label: "Mali", currencies: ["XOF"] },
+  { value: "Burkina Faso", label: "Burkina Faso", currencies: ["XOF"] },
+  { value: "Niger", label: "Niger", currencies: ["XOF"] },
+  { value: "B\xE9nin", label: "B\xE9nin", currencies: ["XOF"] },
+  { value: "Togo", label: "Togo", currencies: ["XOF"] },
+  { value: "Guin\xE9e-Bissau", label: "Guin\xE9e-Bissau", currencies: ["XOF"] },
+  // Reste de l'Afrique
+  { value: "Rwanda", label: "Rwanda", currencies: ["RWF"] },
+  { value: "Ouganda", label: "Ouganda", currencies: ["UGX"] },
+  { value: "Tanzanie", label: "Tanzanie", currencies: ["TZS"] },
+  { value: "Kenya", label: "Kenya", currencies: ["KES"] },
+  { value: "Nigeria", label: "Nigeria", currencies: ["NGN"] },
+  { value: "Ghana", label: "Ghana", currencies: ["GHS"] },
+  { value: "Afrique du Sud", label: "Afrique du Sud", currencies: ["ZAR"] },
+  { value: "Maroc", label: "Maroc", currencies: ["MAD"] },
+  { value: "\xC9gypte", label: "\xC9gypte", currencies: ["EGP"] },
+  // Hors d'Afrique
+  { value: "France", label: "France", currencies: ["EUR"] },
+  { value: "Belgique", label: "Belgique", currencies: ["EUR"] },
+  { value: "Luxembourg", label: "Luxembourg", currencies: ["EUR"] },
+  { value: "Suisse", label: "Suisse", currencies: ["CHF"] },
+  { value: "Royaume-Uni", label: "Royaume-Uni", currencies: ["GBP"] },
+  { value: "\xC9tats-Unis", label: "\xC9tats-Unis", currencies: ["USD"] },
+  { value: "Canada", label: "Canada", currencies: ["CAD"] },
+  { value: "Australie", label: "Australie", currencies: ["AUD"] },
+  { value: "Chine", label: "Chine", currencies: ["CNY"] },
+  { value: "Japon", label: "Japon", currencies: ["JPY"] },
+  { value: "Inde", label: "Inde", currencies: ["INR"] }
+];
+var DEFAULT_COUNTRY = "RDC";
+function defaultCountryForCurrency(code) {
+  const upper = code.trim().toUpperCase();
+  return SUPPORTED_COUNTRIES.find((c) => c.currencies.includes(upper))?.value ?? DEFAULT_COUNTRY;
+}
+function getCountryByValue(value) {
+  return SUPPORTED_COUNTRIES.find((c) => c.value === value);
+}
+
 // src/pricing.ts
 function computeMargin(costPrice, sellingPrice) {
   const cost = Number(costPrice ?? 0);
@@ -184,6 +235,7 @@ function dueDateLabel(dueDate) {
   return `\xC9choit dans ${-late} j`;
 }
 export {
+  DEFAULT_COUNTRY,
   LIBELLES_VERROU_PERIMETRE,
   MAX_QUANTITY,
   MIN_QUANTITY,
@@ -193,6 +245,7 @@ export {
   QUANTITY_INTEGER_DIGITS,
   ROLE_HIERARCHY,
   ROLE_LABELS,
+  SUPPORTED_COUNTRIES,
   SUPPORTED_CURRENCIES,
   availableBase,
   availableSplit,
@@ -203,6 +256,7 @@ export {
   createCurrencyTable,
   createMoneyHelpers,
   daysLate,
+  defaultCountryForCurrency,
   dueDateLabel,
   formatDate,
   formatDateFr,
@@ -221,6 +275,7 @@ export {
   formatQuantity,
   formatTimeFr,
   formatUnitQuantity,
+  getCountryByValue,
   getCurrencyByCode,
   getCurrencyName,
   getCurrencySymbol,

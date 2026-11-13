@@ -128,6 +128,57 @@ declare function getCurrencySymbol(code: string): string;
  */
 declare function getCurrencyName(code: string): string;
 
+/**
+ * Les pays proposés à la création d'un établissement, et le pays qu'une devise
+ * suggère.
+ *
+ * Les deux surfaces écrivaient `country: "RDC"` en dur : un marchand de Douala
+ * qui choisissait le franc CFA restait domicilié en RDC, sur ses tickets comme
+ * dans l'administration, et aucun écran ne lui permettait de le corriger avant
+ * d'être entré dans l'application.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ LA DEVISE SUGGÈRE UN PAYS, ELLE NE L'IMPOSE PAS.                         │
+ * │                                                                          │
+ * │ Le franc CFA de la CEMAC est la monnaie de six pays, l'euro de vingt, et │
+ * │ le dollar circule en RDC à côté du franc congolais. Le pays se préremplit│
+ * │ depuis la devise tant que le marchand n'en a pas choisi un, puis il est  │
+ * │ à lui : changer de devise après coup ne doit pas défaire son choix.      │
+ * │ Cette règle-là vit dans l'écran, qui seul sait si le champ a été touché. │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * ⚠ `value` EST CE QUI S'ENREGISTRE, et c'est un NOM, pas un code ISO.
+ *   `Organization.country` est un texte libre depuis l'origine, imprimé tel
+ *   quel en tête des tickets, et tous les établissements existants portent
+ *   « RDC ». Passer à des codes réécrirait le papier de chacun d'eux ; d'où
+ *   « RDC » pour la RDC, et le nom français partout ailleurs.
+ *
+ * ⚠ L'ORDRE DE LA LISTE EST UNE DÉCISION : le pays suggéré par une devise est
+ *   le PREMIER qui l'emploie. C'est ce qui fait suggérer la RDC pour le dollar -
+ *   les marchands en dollars de ce produit sont congolais - et le Cameroun pour
+ *   le franc CFA de la CEMAC. Un test épingle chaque devise.
+ */
+interface CountryOption {
+    /** Ce qui s'enregistre dans `Organization.country`, et s'imprime. */
+    value: string;
+    /** Ce que le sélecteur affiche. */
+    label: string;
+    /** Les devises qu'on y emploie couramment, par ordre d'usage. */
+    currencies: string[];
+}
+declare const SUPPORTED_COUNTRIES: CountryOption[];
+/** Le pays par défaut d'un établissement, quand rien d'autre ne le dit. */
+declare const DEFAULT_COUNTRY = "RDC";
+/**
+ * Le pays qu'une devise suggère : le premier de la liste qui l'emploie.
+ *
+ * Une devise inconnue rend `DEFAULT_COUNTRY` plutôt que rien : le champ est
+ * obligatoire côté serveur, et un sélecteur vide se lirait comme un oubli.
+ */
+declare function defaultCountryForCurrency(code: string): string;
+/** Un pays de la liste, par la valeur enregistrée. */
+declare function getCountryByValue(value: string): CountryOption | undefined;
+
 declare function pluralizeUnit(word: string, count: number): string;
 
 /**
@@ -284,4 +335,4 @@ declare function daysLate(dueDate?: string | null): number;
 /** Libellé court : « En retard de 5 j », « Échoit dans 3 j », « Échoit aujourd'hui ». */
 declare function dueDateLabel(dueDate?: string | null): string | null;
 
-export { type CurrencyOption, LIBELLES_VERROU_PERIMETRE, type ManageableRole, type Margin, type MotifVerrouPerimetre, NNBSP, ROLE_HIERARCHY, ROLE_LABELS, type Role, SUPPORTED_CURRENCIES, type UserPermissions, blendedUnitCost, canManageRole, choixEntrepotRecevable, computeMargin, daysLate, dueDateLabel, formatDate, formatDateFr, formatDateTime, formatDateTimeFr, formatDecimal, formatFixedFr, formatNumber, formatNumberFr, formatPercent, formatPrice, formatPriceValue, formatTimeFr, getCurrencyByCode, getCurrencyName, getCurrencySymbol, getDefaultCurrency, hasAllPermissions, hasAnyPermission, hasPermission, isAtLeastRole, isOverdue, isRole, monthLong, monthShort, packageEquivalent, pluralizeUnit, retailEquivalent, setDefaultCurrency, verrouEntrepot, weekdayLong };
+export { type CountryOption, type CurrencyOption, DEFAULT_COUNTRY, LIBELLES_VERROU_PERIMETRE, type ManageableRole, type Margin, type MotifVerrouPerimetre, NNBSP, ROLE_HIERARCHY, ROLE_LABELS, type Role, SUPPORTED_COUNTRIES, SUPPORTED_CURRENCIES, type UserPermissions, blendedUnitCost, canManageRole, choixEntrepotRecevable, computeMargin, daysLate, defaultCountryForCurrency, dueDateLabel, formatDate, formatDateFr, formatDateTime, formatDateTimeFr, formatDecimal, formatFixedFr, formatNumber, formatNumberFr, formatPercent, formatPrice, formatPriceValue, formatTimeFr, getCountryByValue, getCurrencyByCode, getCurrencyName, getCurrencySymbol, getDefaultCurrency, hasAllPermissions, hasAnyPermission, hasPermission, isAtLeastRole, isOverdue, isRole, monthLong, monthShort, packageEquivalent, pluralizeUnit, retailEquivalent, setDefaultCurrency, verrouEntrepot, weekdayLong };

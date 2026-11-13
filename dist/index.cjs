@@ -20,6 +20,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var index_exports = {};
 __export(index_exports, {
+  DEFAULT_COUNTRY: () => DEFAULT_COUNTRY,
   LIBELLES_VERROU_PERIMETRE: () => LIBELLES_VERROU_PERIMETRE,
   MAX_QUANTITY: () => MAX_QUANTITY,
   MIN_QUANTITY: () => MIN_QUANTITY,
@@ -29,6 +30,7 @@ __export(index_exports, {
   QUANTITY_INTEGER_DIGITS: () => QUANTITY_INTEGER_DIGITS,
   ROLE_HIERARCHY: () => ROLE_HIERARCHY,
   ROLE_LABELS: () => ROLE_LABELS,
+  SUPPORTED_COUNTRIES: () => SUPPORTED_COUNTRIES,
   SUPPORTED_CURRENCIES: () => SUPPORTED_CURRENCIES,
   availableBase: () => availableBase,
   availableSplit: () => availableSplit,
@@ -39,6 +41,7 @@ __export(index_exports, {
   createCurrencyTable: () => createCurrencyTable,
   createMoneyHelpers: () => createMoneyHelpers,
   daysLate: () => daysLate,
+  defaultCountryForCurrency: () => defaultCountryForCurrency,
   dueDateLabel: () => dueDateLabel,
   formatDate: () => formatDate,
   formatDateFr: () => formatDateFr,
@@ -57,6 +60,7 @@ __export(index_exports, {
   formatQuantity: () => formatQuantity,
   formatTimeFr: () => formatTimeFr,
   formatUnitQuantity: () => formatUnitQuantity,
+  getCountryByValue: () => getCountryByValue,
   getCurrencyByCode: () => getCurrencyByCode,
   getCurrencyName: () => getCurrencyName,
   getCurrencySymbol: () => getCurrencySymbol,
@@ -247,6 +251,57 @@ function getCurrencySymbol(code) {
 function getCurrencyName(code) {
   const currency = getCurrencyByCode(code);
   return currency?.name || code;
+}
+
+// src/countries.ts
+var SUPPORTED_COUNTRIES = [
+  // Afrique centrale
+  { value: "RDC", label: "R\xE9publique d\xE9mocratique du Congo", currencies: ["CDF", "USD"] },
+  { value: "Cameroun", label: "Cameroun", currencies: ["XAF"] },
+  { value: "Congo", label: "R\xE9publique du Congo", currencies: ["XAF"] },
+  { value: "Gabon", label: "Gabon", currencies: ["XAF"] },
+  { value: "Tchad", label: "Tchad", currencies: ["XAF"] },
+  { value: "Centrafrique", label: "R\xE9publique centrafricaine", currencies: ["XAF"] },
+  { value: "Guin\xE9e \xE9quatoriale", label: "Guin\xE9e \xE9quatoriale", currencies: ["XAF"] },
+  // Afrique de l'Ouest (UEMOA)
+  { value: "S\xE9n\xE9gal", label: "S\xE9n\xE9gal", currencies: ["XOF"] },
+  { value: "C\xF4te d'Ivoire", label: "C\xF4te d'Ivoire", currencies: ["XOF"] },
+  { value: "Mali", label: "Mali", currencies: ["XOF"] },
+  { value: "Burkina Faso", label: "Burkina Faso", currencies: ["XOF"] },
+  { value: "Niger", label: "Niger", currencies: ["XOF"] },
+  { value: "B\xE9nin", label: "B\xE9nin", currencies: ["XOF"] },
+  { value: "Togo", label: "Togo", currencies: ["XOF"] },
+  { value: "Guin\xE9e-Bissau", label: "Guin\xE9e-Bissau", currencies: ["XOF"] },
+  // Reste de l'Afrique
+  { value: "Rwanda", label: "Rwanda", currencies: ["RWF"] },
+  { value: "Ouganda", label: "Ouganda", currencies: ["UGX"] },
+  { value: "Tanzanie", label: "Tanzanie", currencies: ["TZS"] },
+  { value: "Kenya", label: "Kenya", currencies: ["KES"] },
+  { value: "Nigeria", label: "Nigeria", currencies: ["NGN"] },
+  { value: "Ghana", label: "Ghana", currencies: ["GHS"] },
+  { value: "Afrique du Sud", label: "Afrique du Sud", currencies: ["ZAR"] },
+  { value: "Maroc", label: "Maroc", currencies: ["MAD"] },
+  { value: "\xC9gypte", label: "\xC9gypte", currencies: ["EGP"] },
+  // Hors d'Afrique
+  { value: "France", label: "France", currencies: ["EUR"] },
+  { value: "Belgique", label: "Belgique", currencies: ["EUR"] },
+  { value: "Luxembourg", label: "Luxembourg", currencies: ["EUR"] },
+  { value: "Suisse", label: "Suisse", currencies: ["CHF"] },
+  { value: "Royaume-Uni", label: "Royaume-Uni", currencies: ["GBP"] },
+  { value: "\xC9tats-Unis", label: "\xC9tats-Unis", currencies: ["USD"] },
+  { value: "Canada", label: "Canada", currencies: ["CAD"] },
+  { value: "Australie", label: "Australie", currencies: ["AUD"] },
+  { value: "Chine", label: "Chine", currencies: ["CNY"] },
+  { value: "Japon", label: "Japon", currencies: ["JPY"] },
+  { value: "Inde", label: "Inde", currencies: ["INR"] }
+];
+var DEFAULT_COUNTRY = "RDC";
+function defaultCountryForCurrency(code) {
+  const upper = code.trim().toUpperCase();
+  return SUPPORTED_COUNTRIES.find((c) => c.currencies.includes(upper))?.value ?? DEFAULT_COUNTRY;
+}
+function getCountryByValue(value) {
+  return SUPPORTED_COUNTRIES.find((c) => c.value === value);
 }
 
 // src/currency.ts
@@ -1645,6 +1700,7 @@ function panierServable(lines2) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  DEFAULT_COUNTRY,
   LIBELLES_VERROU_PERIMETRE,
   MAX_QUANTITY,
   MIN_QUANTITY,
@@ -1654,6 +1710,7 @@ function panierServable(lines2) {
   QUANTITY_INTEGER_DIGITS,
   ROLE_HIERARCHY,
   ROLE_LABELS,
+  SUPPORTED_COUNTRIES,
   SUPPORTED_CURRENCIES,
   availableBase,
   availableSplit,
@@ -1664,6 +1721,7 @@ function panierServable(lines2) {
   createCurrencyTable,
   createMoneyHelpers,
   daysLate,
+  defaultCountryForCurrency,
   dueDateLabel,
   formatDate,
   formatDateFr,
@@ -1682,6 +1740,7 @@ function panierServable(lines2) {
   formatQuantity,
   formatTimeFr,
   formatUnitQuantity,
+  getCountryByValue,
   getCurrencyByCode,
   getCurrencyName,
   getCurrencySymbol,
