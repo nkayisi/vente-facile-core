@@ -115,3 +115,41 @@ describe("Une seule devise annoncée n'imprime rien de plus", () => {
     expect(texte(un)).not.toContain("Annoncé au client");
   });
 });
+
+describe("La monnaie rendue dans une autre devise que la facture", () => {
+  /** La valeur de la ligne « Monnaie rendue », telle qu'elle s'imprime. */
+  function monnaie(data: SaleReceiptData): string | undefined {
+    for (const b of buildSaleReceipt(data)) {
+      if (b.kind !== "amounts") continue;
+      const ligne = b.rows.find((r) => r.label === "Monnaie rendue");
+      if (ligne) return ligne.value;
+    }
+    return undefined;
+  }
+
+  it("porte le symbole des billets rendus, pas celui de la facture", () => {
+    // Facture en dollars, monnaie rendue en francs : le client doit lire des
+    // francs, c'est ce qu'il a dans la main.
+    const v = monnaie({
+      ...base,
+      currency: "USD",
+      payments: [{ method: "Espèces", amount: 50, currency: "USD" }],
+      changeAmount: 89240,
+      changeCurrency: "CDF",
+    });
+    expect(v).toContain("FC");
+    expect(v).not.toContain("$");
+    // Le franc n'a pas de décimales : « 89 240.00 » serait un faux montant.
+    expect(v).not.toMatch(/\.00/);
+  });
+
+  it("retombe sur la devise de la facture quand rien n'est précisé", () => {
+    const v = monnaie({
+      ...base,
+      currency: "USD",
+      payments: [{ method: "Espèces", amount: 50, currency: "USD" }],
+      changeAmount: 2.5,
+    });
+    expect(v).toContain("$");
+  });
+});

@@ -405,7 +405,7 @@ function buildSaleReceipt(data) {
     })),
     (data.changeAmount ?? 0) > 0 && {
       label: "Monnaie rendue",
-      value: money(data.changeAmount)
+      value: money(data.changeAmount, data.changeCurrency || data.currency)
     },
     (data.amountDue ?? 0) > 0 && {
       label: "Reste \xE0 payer",
@@ -706,4 +706,4 @@ export {
   buildExpenseReceipt,
   receipt_exports
 };
-//# sourceMappingURL=chunk-HP7YTDV4.js.map
+//# sourceMappingURL=chunk-6JKWBBNX.js.map

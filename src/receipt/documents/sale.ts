@@ -80,7 +80,19 @@ export interface SaleReceiptData extends BaseDocumentData {
   total: number;
   currency: string;
   payments: SaleReceiptPayment[];
+  /** La monnaie rendue, exprimée dans `changeCurrency`. */
   changeAmount?: number;
+  /**
+   * La devise des billets RENDUS, quand elle n'est pas celle de la facture.
+   *
+   * ⚠ Sans elle, une monnaie rendue en francs sur une facture en dollars
+   * sortait « Monnaie rendue 89 240.00 $ » : le bon nombre, sous le mauvais
+   * symbole, sur le papier que le client emporte. Le serveur la porte depuis
+   * toujours (`Sale.change_currency`) ; le document n'avait aucun champ pour
+   * la recevoir. Relevé sur l'émulateur le 2026-11-14. Absente : la devise de
+   * la facture.
+   */
+  changeCurrency?: string;
   amountDue?: number;
   dueDate?: string;
   loyalty?: LoyaltyData;
@@ -176,7 +188,7 @@ export function buildSaleReceipt(data: SaleReceiptData): Block[] {
     })),
     (data.changeAmount ?? 0) > 0 && {
       label: "Monnaie rendue",
-      value: money(data.changeAmount as number),
+      value: money(data.changeAmount as number, data.changeCurrency || data.currency),
     },
     (data.amountDue ?? 0) > 0 && {
       label: "Reste à payer",

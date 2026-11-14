@@ -45,7 +45,7 @@ import {
   getCurrencyName,
   getCurrencySymbol,
   receipt_exports
-} from "./chunk-HP7YTDV4.js";
+} from "./chunk-6JKWBBNX.js";
 import {
   pluralizeUnit
 } from "./chunk-B5W4KJNN.js";

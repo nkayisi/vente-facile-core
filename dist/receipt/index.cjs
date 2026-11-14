@@ -455,7 +455,7 @@ function buildSaleReceipt(data) {
     })),
     (data.changeAmount ?? 0) > 0 && {
       label: "Monnaie rendue",
-      value: money(data.changeAmount)
+      value: money(data.changeAmount, data.changeCurrency || data.currency)
     },
     (data.amountDue ?? 0) > 0 && {
       label: "Reste \xE0 payer",
