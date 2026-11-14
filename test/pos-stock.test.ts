@@ -26,7 +26,6 @@ const casier: StockedProductLike = {
   unit_name: "bouteille",
   packaging_unit_name: "casier",
   track_inventory: true,
-  allow_negative_stock: false,
   stock_quantity: 39, // 3 casiers scellés + 3 bouteilles
   stock_packages: 3,
   stock_loose: 3,
@@ -45,10 +44,12 @@ describe("Bornes de stock", () => {
   it("distingue « aucune borne » de « partage inconnu »", () => {
     // Stock non suivi : on peut ajouter autant qu'on veut.
     expect(addableBase({ id: "x", track_inventory: false }, [])).toBeNull();
-    // Découvert autorisé : idem, c'est un choix de l'entrepôt.
+    // ⚠ Le stock négatif n'existe plus : un article suivi à zéro est BORNÉ à
+    // zéro, et rien ne lève cette borne. C'était un réglage d'entrepôt, retiré
+    // de la plateforme ; le rendre ici rouvrirait l'encaissement au découvert.
     expect(
-      addableBase({ id: "x", track_inventory: true, allow_negative_stock: true, stock_quantity: 0 }, [])
-    ).toBeNull();
+      addableBase({ id: "x", track_inventory: true, stock_quantity: 0 }, [])
+    ).toBe(0);
 
     // Partage non renseigné : on ne SAIT pas, et on n'invente pas un zéro.
     const inconnu = addableChannels(
@@ -133,10 +134,12 @@ describe("Bornes de stock", () => {
     );
   });
 
-  it("laisse passer quand l'entrepot tolere le decouvert", () => {
-    const decouvert = { ...casier, allow_negative_stock: true };
-    expect(verifierAjout(decouvert, [], { packages: 99, loose: 0 }).ok).toBe(true);
-    expect(addableSealed(decouvert, [])).toBeNull();
+  it("ne laisse JAMAIS passer au-delà du disponible : le découvert n'existe plus", () => {
+    // Un champ hérité d'un serveur antérieur ne doit pas rouvrir la borne : le
+    // type ne le porte plus, mais un objet venu du réseau peut encore l'avoir.
+    const decouvert = { ...casier, allow_negative_stock: true } as StockedProductLike;
+    expect(verifierAjout(decouvert, [], { packages: 99, loose: 0 }).ok).toBe(false);
+    expect(addableSealed(decouvert, [])).toBe(3);
   });
 });
 
@@ -161,8 +164,7 @@ describe("Quantités fractionnaires", () => {
     units_per_package: null,
     unit_name: "kg",
     track_inventory: true,
-    allow_negative_stock: false,
-    stock_quantity: 25,
+      stock_quantity: 25,
     stock_packages: null,
     stock_loose: null,
   };

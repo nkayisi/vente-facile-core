@@ -42,7 +42,18 @@ export interface UserPermissions {
    * règle de périmètre : la laisser dehors garantissait que la règle y reste
    * aussi. Facultatif, donc un serveur antérieur ne ment pas en l'omettant.
    */
-  assigned_warehouses?: { id: string; name: string }[];
+  assigned_warehouses?: { id: string; name: string; is_active?: boolean }[];
+  /**
+   * La case « Consulter tous les entrepôts », accordée par le propriétaire :
+   * le membre LIT tout, partout, et n'agit que dans ses entrepôts.
+   */
+  consult_all_warehouses?: boolean;
+  /**
+   * L'empreinte du périmètre. Elle change dès qu'un rôle, une permission, une
+   * affectation ou la case change : un client qui la voit bouger relit ses
+   * droits, et le terminal retire ses tables.
+   */
+  perimetre_version?: string;
 }
 
 export function hasPermission(

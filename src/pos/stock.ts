@@ -8,8 +8,9 @@
  * ATTENTION, deux sens de `null` cohabitent ici, et les confondre inverse la
  * décision :
  *
- * - `addableBase` rend `null` pour « AUCUNE BORNE » : stock non suivi, ou
- *   entrepôt tolérant le découvert. On peut ajouter autant qu'on veut.
+ * - `addableBase` rend `null` pour « AUCUNE BORNE » : stock non suivi. On peut
+ *   ajouter autant qu'on veut. Il n'y a plus d'autre cas : le stock négatif a
+ *   été retiré de la plateforme, aucune sortie ne passe sous zéro.
  * - `addableChannels` rend `null` pour « PARTAGE INCONNU » : la ligne de stock
  *   ne dit pas ce qui est scellé et ce qui est en vrac. On ne sait rien, et on
  *   n'invente surtout pas un zéro bloquant : le serveur reste seul juge.
@@ -40,7 +41,6 @@ export interface StockedProductLike {
   unit_name?: string | null;
   packaging_unit_name?: string | null;
   track_inventory?: boolean | null;
-  allow_negative_stock?: boolean | null;
   /** Disponible total, en unité de détail. */
   stock_quantity?: number | string | null;
   /** Contenants encore scellés. `null` : partage non renseigné. */
@@ -67,14 +67,14 @@ export function inCart(lines: BasketLine[], productId: string): number {
 /**
  * Quantité encore ajoutable, en unité de détail.
  *
- * `null` signifie AUCUNE BORNE : le stock n'est pas suivi, ou l'entrepôt tolère
- * le découvert. Le serveur applique la même règle.
+ * `null` signifie AUCUNE BORNE : le stock n'est pas suivi. Le serveur applique
+ * la même règle.
  */
 export function addableBase(
   product: StockedProductLike,
   lines: BasketLine[]
 ): number | null {
-  if (!product.track_inventory || product.allow_negative_stock) return null;
+  if (!product.track_inventory) return null;
   return Math.max(0, num(product.stock_quantity) - inCart(lines, product.id));
 }
 
@@ -119,15 +119,14 @@ export function addableChannels(
 /**
  * Contenants encore scellés, donc réellement vendables en gros.
  *
- * Borne absente si l'entrepôt tolère le découvert, comme le fait
- * `PackagingService.assert_sealed_available`.
+ * Borne absente pour un article dont le stock n'est pas suivi.
  */
 export function addableSealed(
   product: StockedProductLike,
   lines: BasketLine[],
   options: { ignoreCartLine?: boolean } = {}
 ): number | null {
-  if (!product.track_inventory || product.allow_negative_stock) return null;
+  if (!product.track_inventory) return null;
   return addableChannels(product, lines, options).sealed;
 }
 
@@ -253,58 +252,100 @@ export interface LigneStockee extends BasketLine {
   product: BasketProduct & StockedProductLike;
 }
 
+/** Pourquoi une ligne ne s'encaisse pas, dans l'ORDRE DU SERVEUR. */
+export type CauseRefusEncaissement = "verrou" | "stock-inconnu" | "rupture";
+
 /** Ce qui empêche une ligne d'être encaissée. */
 export interface Rupture {
   /** Rang de la ligne dans le panier, pour la désigner à l'écran. */
   index: number;
   productId: string;
   name: string;
-  /** Le message de `verifierAjout`, en français, avec son chiffre. */
+  cause: CauseRefusEncaissement;
+  /** La phrase destinée au caissier, en français, avec son chiffre. */
   raison: string;
 }
 
+export interface OptionsEncaissement {
+  /**
+   * Les articles verrouillés par un inventaire en cours DANS L'ENTREPÔT DE LA
+   * CAISSE : identifiant d'article → référence de la session (`INV-…`). La
+   * référence peut être vide : on dit alors « un inventaire en cours ».
+   */
+  verrous?: ReadonlyMap<string, string>;
+}
+
+/** La phrase du serveur, ramenée à un seul article. */
+export function motifDuVerrou(nomArticle: string, reference: string): string {
+  const session = reference ? ` (${reference})` : "";
+  return (
+    `${nomArticle} est bloqué par un inventaire en cours${session}. ` +
+    `Attendez la fin de l'inventaire pour l'encaisser.`
+  );
+}
+
 /**
- * Les lignes que le stock ne couvre pas.
+ * Un stock INCONNU n'est pas un stock nul, et la phrase doit le dire.
+ *
+ * Le VERDICT est le même - sans ligne de stock dans cet entrepôt, le serveur
+ * refuse aussi (`available = stock.available_quantity if stock else 0`) - mais
+ * « 0 en stock » sous une carte qui annonce « aucun stock ici » donnerait au
+ * caissier deux affirmations contradictoires sur le même écran.
+ */
+export function motifStockInconnu(nomArticle: string): string {
+  return (
+    `Aucun stock de ${nomArticle} dans cet entrepôt : ` +
+    `enregistrez une entrée de stock avant de l'encaisser.`
+  );
+}
+
+const stockInconnu = (p: StockedProductLike): boolean =>
+  Boolean(p.track_inventory) &&
+  (p.stock_quantity === null || p.stock_quantity === undefined);
+
+/**
+ * Les lignes qui empêchent l'encaissement.
  *
  * ┌──────────────────────────────────────────────────────────────────────────┐
- * │ LE REFUS DE STOCK A CHANGÉ DE PLACE, IL N'A PAS DISPARU.                 │
+ * │ RIEN NE FERME L'AJOUT, TOUT FERME L'ENCAISSEMENT.                       │
  * │                                                                          │
- * │ Le comptoir refusait l'AJOUT d'un article en rupture. Il l'accepte        │
- * │ désormais, et c'est l'ENCAISSEMENT qui ferme. L'invariant qui compte est  │
- * │ intact : aucun ticket de vente n'est jamais imprimé pour une vente que le │
- * │ serveur refusera. Ce qui devient possible, c'est de chiffrer une commande │
- * │ et d'en sortir une PROFORMA, document qui dit lui-même n'être pas un reçu.│
- * │                                                                          │
- * │ Avant, un client qui demandait un article épuisé se heurtait à une tuile  │
- * │ grise sans explication. Il repart maintenant avec un devis.               │
- * │                                                                          │
- * │ Le verrou d'INVENTAIRE, lui, ne bouge pas : il reste un refus à l'ajout,  │
- * │ des deux côtés. Le serveur l'oppose avant même de regarder les quantités, │
- * │ et ce n'est pas un manque que le marchand peut résoudre au comptoir.      │
+ * │ Tout le catalogue s'ajoute au panier, en toute quantité, même sans stock │
+ * │ et même sous inventaire : c'est ce qui permet de chiffrer une commande   │
+ * │ et d'en sortir une PROFORMA, document qui dit lui-même n'être pas un     │
+ * │ reçu. L'invariant qui compte est ailleurs, et il est intact : aucun      │
+ * │ ticket de vente n'est jamais imprimé pour une vente que le serveur       │
+ * │ refusera. Le stock négatif n'existe plus : aucun entrepôt ne laisse      │
+ * │ encaisser au-delà de son disponible.                                     │
  * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * ⚠ LE VERROU PASSE AVANT LE STOCK, comme chez le serveur, qui refuse les
+ * produits bloqués avant de regarder les quantités : dire « stock
+ * insuffisant » sur un article sous inventaire enverrait chercher au dépôt une
+ * marchandise qui est là, mais interdite à la vente.
  *
  * ⚠ CHAQUE LIGNE SE VÉRIFIE CONTRE LE PANIER PRIVÉ D'ELLE-MÊME. `verifierAjout`
  * compte ce qui est déjà au panier ; lui passer la liste entière ferait qu'une
- * ligne posée exactement sur le disponible se compterait CONTRE ELLE-MÊME, et
- * tout panier deviendrait alors non encaissable. C'est l'exclusion que le
- * réducteur applique déjà quand il modifie une ligne existante.
+ * ligne posée exactement sur le disponible se compterait CONTRE ELLE-MÊME.
  */
-export function lignesEnRupture(lines: LigneStockee[]): Rupture[] {
+export function lignesEnRupture(
+  lines: LigneStockee[],
+  options: OptionsEncaissement = {}
+): Rupture[] {
   const ruptures: Rupture[] = [];
 
   lines.forEach((ligne, index) => {
-    // Une ligne vide n'est pas une rupture de stock : `verifierAjout` la
-    // refuserait par « Indiquez une quantité », message qui n'a rien à faire
-    // dans un bandeau de rupture. Elle ne devrait pas exister, et si elle
-    // existe c'est un autre défaut.
-    //
-    // ⚠ LE SEUIL EST `MIN_QUANTITY`, JAMAIS 1. Avec un seuil à 1, une ligne de
-    // 0,5 kg n'était JAMAIS contrôlée contre le stock : `panierServable`
-    // rendait vrai, `motifsEncaissement` rendait une liste vide, et le ticket
-    // s'imprimait pour une vente que le serveur refuse. C'est exactement
-    // l'invariant que l'encadré ci-dessus déclare tenir. Une ligne de 0,5 n'est
-    // pas vide ; seule une ligne sous le plus petit pas enregistrable l'est.
+    // ⚠ LE SEUIL EST `MIN_QUANTITY`, JAMAIS 1 : une ligne de 0,5 kg n'est pas
+    // vide, et un seuil à 1 la laissait passer sans contrôle de stock.
     if (ligne.quantity < MIN_QUANTITY) return;
+
+    const name = ligne.product.name || "Cet article";
+    const base = { index, productId: ligne.product.id, name };
+
+    const reference = options.verrous?.get(ligne.product.id);
+    if (reference !== undefined) {
+      ruptures.push({ ...base, cause: "verrou", raison: motifDuVerrou(name, reference) });
+      return;
+    }
 
     const autres = lines.filter((_, i) => i !== index);
     const verdict = verifierAjout(ligne.product, autres, {
@@ -313,23 +354,33 @@ export function lignesEnRupture(lines: LigneStockee[]): Rupture[] {
     });
     if (verdict.ok || verdict.raison === null) return;
 
-    ruptures.push({
-      index,
-      productId: ligne.product.id,
-      name: ligne.product.name || "Cet article",
-      raison: verdict.raison,
-    });
+    if (stockInconnu(ligne.product)) {
+      ruptures.push({ ...base, cause: "stock-inconnu", raison: motifStockInconnu(name) });
+      return;
+    }
+    ruptures.push({ ...base, cause: "rupture", raison: verdict.raison });
   });
 
   return ruptures;
 }
 
+/** Les phrases qui ferment « Encaisser », une par ligne en cause. */
+export function motifsEncaissement(
+  lines: LigneStockee[],
+  options: OptionsEncaissement = {}
+): string[] {
+  return lignesEnRupture(lines, options).map((r) => r.raison);
+}
+
 /**
  * Le panier peut-il être encaissé ?
  *
- * Faux dès qu'une ligne est en rupture. La proforma, elle, reste ouverte : c'est
- * tout l'intérêt de séparer les deux.
+ * Faux dès qu'une ligne est en rupture ou verrouillée. La proforma, elle, reste
+ * ouverte : c'est tout l'intérêt de séparer les deux.
  */
-export function panierServable(lines: LigneStockee[]): boolean {
-  return lignesEnRupture(lines).length === 0;
+export function panierServable(
+  lines: LigneStockee[],
+  options: OptionsEncaissement = {}
+): boolean {
+  return lignesEnRupture(lines, options).length === 0;
 }

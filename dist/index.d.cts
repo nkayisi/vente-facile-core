@@ -1,4 +1,4 @@
-export { C as ChannelAvailability, a as CurrencyFallback, b as CurrencyInfo, c as CurrencyTable, M as MAX_QUANTITY, d as MIN_QUANTITY, e as MONEY_EPS, f as MoneyHelpers, O as OrganizationCurrency, g as OrganizationCurrencyLike, P as PackagedProductLike, h as Packaging, Q as QUANTITY_DECIMALS, i as QUANTITY_INTEGER_DIGITS, S as StockCounters, j as availableBase, k as availableSplit, l as createCurrencyTable, m as createMoneyHelpers, n as formatPackaged, o as formatPackagedDifference, p as formatPackagedSplit, q as formatQuantity, r as formatUnitQuantity, s as getPackaging, t as pos, u as r2, v as remainingChannels, w as roundQuantity, x as splitPackaged, y as toBaseQuantity } from './index-DbAPhYx1.cjs';
+export { C as ChannelAvailability, a as CurrencyFallback, b as CurrencyInfo, c as CurrencyTable, M as MAX_QUANTITY, d as MIN_QUANTITY, e as MONEY_EPS, f as MoneyHelpers, O as OrganizationCurrency, g as OrganizationCurrencyLike, P as PackagedProductLike, h as Packaging, Q as QUANTITY_DECIMALS, i as QUANTITY_INTEGER_DIGITS, S as StockCounters, j as availableBase, k as availableSplit, l as createCurrencyTable, m as createMoneyHelpers, n as formatPackaged, o as formatPackagedDifference, p as formatPackagedSplit, q as formatQuantity, r as formatUnitQuantity, s as getPackaging, t as pos, u as r2, v as remainingChannels, w as roundQuantity, x as splitPackaged, y as toBaseQuantity } from './index-RTEA-fid.cjs';
 export { i as receipt } from './index-CsM2Ovny.cjs';
 
 /**
@@ -258,7 +258,19 @@ interface UserPermissions {
     assigned_warehouses?: {
         id: string;
         name: string;
+        is_active?: boolean;
     }[];
+    /**
+     * La case « Consulter tous les entrepôts », accordée par le propriétaire :
+     * le membre LIT tout, partout, et n'agit que dans ses entrepôts.
+     */
+    consult_all_warehouses?: boolean;
+    /**
+     * L'empreinte du périmètre. Elle change dès qu'un rôle, une permission, une
+     * affectation ou la case change : un client qui la voit bouger relit ses
+     * droits, et le terminal retire ses tables.
+     */
+    perimetre_version?: string;
 }
 declare function hasPermission(userPermissions: UserPermissions | null, permission: string): boolean;
 declare function hasAnyPermission(userPermissions: UserPermissions | null, permissions: string[]): boolean;
@@ -268,29 +280,96 @@ declare function isAtLeastRole(userPermissions: UserPermissions | null, role: Ro
 declare function canManageRole(userPermissions: UserPermissions | null, targetRole: string): boolean;
 
 /**
- * Le périmètre d'un membre : ce qu'il peut filtrer, et ce qui lui est imposé.
+ * Le périmètre d'un membre : ce qu'il peut LIRE, ce qu'il peut FAIRE, et ce
+ * qui lui est imposé.
  *
  * ┌──────────────────────────────────────────────────────────────────────────┐
- * │ CETTE RÈGLE ÉTAIT ÉCRITE DEUX FOIS, ET ELLE AVAIT DÉJÀ DIVERGÉ.         │
+ * │ DEUX NATURES, ET UNE SEULE RÈGLE PAR NATURE.                            │
  * │                                                                          │
- * │ `mobile/.../features/perimetre/filtre-perimetre.ts` et                   │
- * │ `frontend/hooks/use-perimeter.ts` portaient les mêmes trois motifs, les  │
- * │ mêmes libellés AU CARACTÈRE PRÈS, et le même arbre de décision - écrits  │
- * │ séparément. Le second le reconnaissait dans son en-tête : « faute d'un   │
- * │ module partagé ; `@vente-facile/core` serait sa place ».                 │
+ * │ Par défaut, un membre est ISOLÉ dans ses entrepôts affectés : il lit et  │
+ * │ il agit là, et nulle part ailleurs. Le propriétaire peut, membre par     │
+ * │ membre, cocher « Consulter tous les entrepôts » : ce membre LIT alors    │
+ * │ tout, partout et quel qu'en soit l'auteur, mais il n'AGIT toujours que   │
+ * │ dans ses entrepôts. C'est la règle du serveur                            │
+ * │ (`apps/core/warehouse_scope.py`), et ce module en est le miroir.         │
  * └──────────────────────────────────────────────────────────────────────────┘
  *
- * ⚠ CE MODULE REND LE VERROU, IL NE DÉCIDE PAS DE CE QU'ON EN FAIT.
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ L'AUTEUR SUIT UNE PERMISSION, PAS UN RÔLE.                              │
+ * │                                                                          │
+ * │ Voir le travail de ses collègues (ventes, dépenses, caisse, retours,     │
+ * │ devis) tient à `sales.view_all`, que le gérant et le magasinier ont par  │
+ * │ leur rôle et que le caissier reçoit par la case « Voir tout ». Le        │
+ * │ décider sur le rôle « caissier » rendait la case inopérante sur la       │
+ * │ moitié des écrans, et c'est ainsi que les deux surfaces avaient divergé. │
+ * └──────────────────────────────────────────────────────────────────────────┘
  *
- * Et c'est délibéré : sur un membre mono-dépôt, le terminal APPLIQUE son
- * entrepôt là où le back-office ne l'envoie pas. Les deux ont raison chez eux -
- * la base locale du terminal n'est bornée ni pour les dépenses ni pour les
- * mouvements de caisse, alors que le serveur borne toujours. Imposer l'une des
- * deux lectures ici casserait l'autre.
+ * ⚠ CE MODULE REND LE VERROU, IL NE DÉCIDE PAS DE CE QU'ON EN FAIT. Sur un
+ * membre mono-dépôt, le terminal APPLIQUE son entrepôt là où le back-office ne
+ * l'envoie pas : la base locale du terminal est la seule chose qu'il lit, alors
+ * que le serveur borne toujours. Imposer l'une des deux lectures ici casserait
+ * l'autre.
  */
 
-/** Pourquoi un filtre d'entrepôt est fermé. `null` : il est ouvert. */
-type MotifVerrouPerimetre = 'cashier' | 'un-seul-entrepot' | 'aucun-entrepot';
+/** La permission qui ouvre le travail des collègues, dans ses entrepôts. */
+declare const PERMISSION_VOIR_TOUT = "sales.view_all";
+/** Ce que le périmètre lit d'un entrepôt. */
+interface EntrepotDuMembre {
+    id: string;
+    name: string;
+    /** Absent : actif. Un serveur antérieur n'envoie pas le champ. */
+    is_active?: boolean;
+}
+/** Un membre, tel que ses permissions le décrivent. */
+interface MembrePerimetre {
+    role: Role | null;
+    /** La case « Consulter tous les entrepôts », accordée par le propriétaire. */
+    consulteTout: boolean;
+    /** `sales.view_all` : voir le travail de ses collègues, dans ses entrepôts. */
+    voitCollegues: boolean;
+    /** Vide pour un propriétaire : c'est son rôle qui lui donne tout. */
+    affectes: readonly EntrepotDuMembre[];
+}
+/** Lire (consulter, filtrer, exporter) ou agir (vendre, transférer, saisir). */
+type NaturePerimetre = 'lecture' | 'action';
+/**
+ * Le membre décrit par la réponse de `/users/me/permissions/` ou par la
+ * charge de réveil du terminal. `null` : rien n'est connu, rien n'est ouvert.
+ */
+declare function membreDepuisPermissions(p: Pick<UserPermissions, 'role' | 'permissions' | 'assigned_warehouses' | 'consult_all_warehouses'> | null): MembrePerimetre;
+/** Le membre lit-il tous les entrepôts ? Le propriétaire, et la case. */
+declare function litTousLesEntrepots(m: MembrePerimetre): boolean;
+/**
+ * Le membre est-il borné à SES propres lignes ?
+ *
+ * Faux pour le propriétaire ; faux en LECTURE pour la case « Consulter tous
+ * les entrepôts » (elle ouvre tous les auteurs) ; sinon, faux seulement avec
+ * `sales.view_all`. Un rôle inconnu n'invente pas de borne : le serveur reste
+ * seul juge, et une borne inventée viderait un écran sans dire pourquoi.
+ */
+declare function estBorneParAuteur(m: MembrePerimetre, nature: NaturePerimetre): boolean;
+/**
+ * Les entrepôts que le membre peut LIRE, parmi ceux qu'on connaît.
+ *
+ * ⚠ LES INACTIFS EN FONT PARTIE. Un entrepôt désactivé est fermé aux
+ * opérations, pas effacé : on doit pouvoir relire son historique, filtrer
+ * ses ventes passées, et son badge le dit à l'écran.
+ */
+declare function entrepotsLisibles<T extends {
+    id: string;
+}>(m: MembrePerimetre, tous: readonly T[]): T[];
+/**
+ * Les entrepôts où le membre peut AGIR : ses affectés, actifs.
+ *
+ * La case « Consulter tous » n'y change rien : elle ouvre la lecture, jamais
+ * l'action. Un propriétaire agit partout, mais pas sur un entrepôt désactivé.
+ */
+declare function entrepotsActionnables<T extends {
+    id: string;
+    is_active?: boolean;
+}>(m: MembrePerimetre, tous: readonly T[]): T[];
+/** Pourquoi un filtre est fermé. `null` : il est ouvert. */
+type MotifVerrouPerimetre = 'propres-donnees' | 'un-seul-entrepot' | 'aucun-entrepot' | 'entrepot-inactif';
 /**
  * Ce qu'on écrit sous un filtre fermé.
  *
@@ -299,26 +378,29 @@ type MotifVerrouPerimetre = 'cashier' | 'un-seul-entrepot' | 'aucun-entrepot';
  */
 declare const LIBELLES_VERROU_PERIMETRE: Record<MotifVerrouPerimetre, string>;
 /**
- * Le verrou qui pèse sur le filtre d'entrepôt.
+ * Le verrou qui pèse sur un choix d'entrepôt.
  *
- * @param role              Le rôle du membre.
- * @param nombreAccessibles Combien d'entrepôts VIVANTS lui sont accessibles.
- *                          Pour un propriétaire, ce nombre n'entre pas en
- *                          compte : son accès vient de son rôle.
+ * @param nombre Combien d'entrepôts le membre peut viser dans cette nature :
+ *               `entrepotsLisibles(...).length` pour un filtre,
+ *               `entrepotsActionnables(...).length` pour une saisie.
+ *
+ * ⚠ `entrepot-inactif` ne vaut qu'en ACTION : en lecture, un entrepôt inactif
+ * reste lisible et compte. Il distingue « on ne vous a rien affecté » de « ce
+ * qu'on vous a affecté est fermé » : les deux ne se règlent pas pareil.
  */
-declare function verrouEntrepot(role: Role | null, nombreAccessibles: number): MotifVerrouPerimetre | null;
+declare function verrouEntrepot(m: MembrePerimetre, nombre: number, nature?: NaturePerimetre): MotifVerrouPerimetre | null;
+/** Le verrou qui pèse sur le filtre « Utilisateur ». */
+declare function verrouUtilisateur(m: MembrePerimetre, nature?: NaturePerimetre): MotifVerrouPerimetre | null;
 /**
  * Le choix d'entrepôt RECEVABLE, ou `null`.
  *
- * ⚠ UN CHOIX HORS PÉRIMÈTRE EST ÉCARTÉ, PAS ENVOYÉ. Le serveur le refuse
- * désormais par un 400 : l'envoyer ferait crier l'écran pour une règle qu'on
- * connaissait déjà.
+ * ⚠ UN CHOIX HORS PÉRIMÈTRE EST ÉCARTÉ, PAS ENVOYÉ. Le serveur le refuse par un
+ * 400 : l'envoyer ferait crier l'écran pour une règle qu'on connaissait déjà.
  *
  * ⚠ ET UN VERROU N'EST PAS UN CHOIX. Cette fonction ne rend jamais l'entrepôt
- * d'un verrou : c'est à l'appelant de décider s'il l'applique, et les deux
- * surfaces n'y répondent pas pareil (voir l'en-tête).
+ * d'un verrou : c'est à l'appelant de décider s'il l'applique.
  */
-declare function choixEntrepotRecevable(choix: string | null | undefined, permis: ReadonlySet<string>, estProprietaire: boolean): string | null;
+declare function choixEntrepotRecevable(choix: string | null | undefined, permis: ReadonlySet<string>, ouvertATous: boolean): string | null;
 
 /**
  * Échéances de crédit.
@@ -335,4 +417,4 @@ declare function daysLate(dueDate?: string | null): number;
 /** Libellé court : « En retard de 5 j », « Échoit dans 3 j », « Échoit aujourd'hui ». */
 declare function dueDateLabel(dueDate?: string | null): string | null;
 
-export { type CountryOption, type CurrencyOption, DEFAULT_COUNTRY, LIBELLES_VERROU_PERIMETRE, type ManageableRole, type Margin, type MotifVerrouPerimetre, NNBSP, ROLE_HIERARCHY, ROLE_LABELS, type Role, SUPPORTED_COUNTRIES, SUPPORTED_CURRENCIES, type UserPermissions, blendedUnitCost, canManageRole, choixEntrepotRecevable, computeMargin, daysLate, defaultCountryForCurrency, dueDateLabel, formatDate, formatDateFr, formatDateTime, formatDateTimeFr, formatDecimal, formatFixedFr, formatNumber, formatNumberFr, formatPercent, formatPrice, formatPriceValue, formatTimeFr, getCountryByValue, getCurrencyByCode, getCurrencyName, getCurrencySymbol, getDefaultCurrency, hasAllPermissions, hasAnyPermission, hasPermission, isAtLeastRole, isOverdue, isRole, monthLong, monthShort, packageEquivalent, pluralizeUnit, retailEquivalent, setDefaultCurrency, verrouEntrepot, weekdayLong };
+export { type CountryOption, type CurrencyOption, DEFAULT_COUNTRY, type EntrepotDuMembre, LIBELLES_VERROU_PERIMETRE, type ManageableRole, type Margin, type MembrePerimetre, type MotifVerrouPerimetre, NNBSP, type NaturePerimetre, PERMISSION_VOIR_TOUT, ROLE_HIERARCHY, ROLE_LABELS, type Role, SUPPORTED_COUNTRIES, SUPPORTED_CURRENCIES, type UserPermissions, blendedUnitCost, canManageRole, choixEntrepotRecevable, computeMargin, daysLate, defaultCountryForCurrency, dueDateLabel, entrepotsActionnables, entrepotsLisibles, estBorneParAuteur, formatDate, formatDateFr, formatDateTime, formatDateTimeFr, formatDecimal, formatFixedFr, formatNumber, formatNumberFr, formatPercent, formatPrice, formatPriceValue, formatTimeFr, getCountryByValue, getCurrencyByCode, getCurrencyName, getCurrencySymbol, getDefaultCurrency, hasAllPermissions, hasAnyPermission, hasPermission, isAtLeastRole, isOverdue, isRole, litTousLesEntrepots, membreDepuisPermissions, monthLong, monthShort, packageEquivalent, pluralizeUnit, retailEquivalent, setDefaultCurrency, verrouEntrepot, verrouUtilisateur, weekdayLong };

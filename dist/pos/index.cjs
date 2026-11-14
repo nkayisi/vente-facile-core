@@ -38,6 +38,9 @@ __export(pos_exports, {
   maxGlobalDiscount: () => maxGlobalDiscount,
   maxLoyaltyAmount: () => maxLoyaltyAmount,
   maxUsableCredit: () => maxUsableCredit,
+  motifDuVerrou: () => motifDuVerrou,
+  motifStockInconnu: () => motifStockInconnu,
+  motifsEncaissement: () => motifsEncaissement,
   packagingFactorOf: () => packagingFactorOf,
   panierServable: () => panierServable,
   r2: () => r2,
@@ -446,7 +449,7 @@ function inCart(lines, productId) {
   return ligneDe(lines, productId)?.quantity ?? 0;
 }
 function addableBase(product, lines) {
-  if (!product.track_inventory || product.allow_negative_stock) return null;
+  if (!product.track_inventory) return null;
   return Math.max(0, num4(product.stock_quantity) - inCart(lines, product.id));
 }
 function addableChannels(product, lines, options = {}) {
@@ -468,7 +471,7 @@ function addableChannels(product, lines, options = {}) {
   );
 }
 function addableSealed(product, lines, options = {}) {
-  if (!product.track_inventory || product.allow_negative_stock) return null;
+  if (!product.track_inventory) return null;
   return addableChannels(product, lines, options).sealed;
 }
 function addableLoose(product, lines, options = {}) {
@@ -514,27 +517,44 @@ function verifierAjout(product, lines, saisie) {
   }
   return { ...base, ok: true, raison: null };
 }
-function lignesEnRupture(lines) {
+function motifDuVerrou(nomArticle, reference) {
+  const session = reference ? ` (${reference})` : "";
+  return `${nomArticle} est bloqu\xE9 par un inventaire en cours${session}. Attendez la fin de l'inventaire pour l'encaisser.`;
+}
+function motifStockInconnu(nomArticle) {
+  return `Aucun stock de ${nomArticle} dans cet entrep\xF4t : enregistrez une entr\xE9e de stock avant de l'encaisser.`;
+}
+var stockInconnu = (p) => Boolean(p.track_inventory) && (p.stock_quantity === null || p.stock_quantity === void 0);
+function lignesEnRupture(lines, options = {}) {
   const ruptures = [];
   lines.forEach((ligne, index) => {
     if (ligne.quantity < MIN_QUANTITY) return;
+    const name = ligne.product.name || "Cet article";
+    const base = { index, productId: ligne.product.id, name };
+    const reference = options.verrous?.get(ligne.product.id);
+    if (reference !== void 0) {
+      ruptures.push({ ...base, cause: "verrou", raison: motifDuVerrou(name, reference) });
+      return;
+    }
     const autres = lines.filter((_, i) => i !== index);
     const verdict = verifierAjout(ligne.product, autres, {
       packages: ligne.packageQuantity,
       loose: looseQuantityOf(ligne)
     });
     if (verdict.ok || verdict.raison === null) return;
-    ruptures.push({
-      index,
-      productId: ligne.product.id,
-      name: ligne.product.name || "Cet article",
-      raison: verdict.raison
-    });
+    if (stockInconnu(ligne.product)) {
+      ruptures.push({ ...base, cause: "stock-inconnu", raison: motifStockInconnu(name) });
+      return;
+    }
+    ruptures.push({ ...base, cause: "rupture", raison: verdict.raison });
   });
   return ruptures;
 }
-function panierServable(lines) {
-  return lignesEnRupture(lines).length === 0;
+function motifsEncaissement(lines, options = {}) {
+  return lignesEnRupture(lines, options).map((r) => r.raison);
+}
+function panierServable(lines, options = {}) {
+  return lignesEnRupture(lines, options).length === 0;
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
@@ -556,6 +576,9 @@ function panierServable(lines) {
   maxGlobalDiscount,
   maxLoyaltyAmount,
   maxUsableCredit,
+  motifDuVerrou,
+  motifStockInconnu,
+  motifsEncaissement,
   packagingFactorOf,
   panierServable,
   r2,

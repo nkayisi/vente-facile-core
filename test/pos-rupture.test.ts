@@ -9,6 +9,8 @@
 import { describe, it, expect } from "vitest";
 import {
   lignesEnRupture,
+  motifsEncaissement,
+  motifStockInconnu,
   panierServable,
   type LigneStockee,
   type StockedProductLike,
@@ -22,7 +24,6 @@ const casier: StockedProductLike = {
   unit_name: "bouteille",
   packaging_unit_name: "casier",
   track_inventory: true,
-  allow_negative_stock: false,
   stock_quantity: 39, // 3 casiers scellés + 3 bouteilles
   stock_packages: 3,
   stock_loose: 3,
@@ -32,7 +33,6 @@ const savon: StockedProductLike = {
   id: "p2",
   name: "Savon",
   track_inventory: true,
-  allow_negative_stock: false,
   stock_quantity: 5,
   stock_packages: null,
   stock_loose: null,
@@ -79,19 +79,55 @@ describe("Lignes en rupture", () => {
     expect(lignesEnRupture([ligne(libre, 9999)])).toEqual([]);
   });
 
-  it("ne borne RIEN quand l'entrepôt tolère le découvert", () => {
-    // La décision appartient à l'ENTREPÔT, pas au produit : c'est ce que le
-    // serveur applique dans `Stock.save` et dans son pré-contrôle de vente.
-    const decouvert = { ...savon, id: "p4", allow_negative_stock: true };
-    expect(lignesEnRupture([ligne(decouvert, 9999)])).toEqual([]);
+  it("borne MÊME un objet qui porte encore l'ancien drapeau de découvert", () => {
+    // Le stock négatif a été retiré de la plateforme : aucun entrepôt n'encaisse
+    // au-delà de son disponible. Un champ resté sur un objet venu du réseau ne
+    // doit pas rouvrir l'encaissement.
+    const decouvert = { ...savon, id: "p4", allow_negative_stock: true } as StockedProductLike;
+    const ruptures = lignesEnRupture([ligne(decouvert, 9999)]);
+    expect(ruptures).toHaveLength(1);
+    expect(ruptures[0].cause).toBe("rupture");
   });
 
-  it("traite un stock INCONNU comme une rupture", () => {
+  it("traite un stock INCONNU comme une rupture, et le DIT", () => {
     // `null` ne se lit jamais comme zéro à l'affichage, mais le serveur refuse
     // bel et bien une vente sans ligne de stock pour cet entrepôt : fermer
-    // l'encaissement est la lecture conservatrice, et la seule juste.
+    // l'encaissement est la lecture conservatrice, et la seule juste. La phrase,
+    // elle, ne dit pas « 0 en stock » sous une carte qui annonce « aucun stock ».
     const inconnu = { ...savon, id: "p5", stock_quantity: null };
-    expect(lignesEnRupture([ligne(inconnu, 1)])).toHaveLength(1);
+    const ruptures = lignesEnRupture([ligne(inconnu, 1)]);
+    expect(ruptures).toHaveLength(1);
+    expect(ruptures[0].cause).toBe("stock-inconnu");
+    expect(ruptures[0].raison).toBe(motifStockInconnu("Savon"));
+    expect(ruptures[0].raison).not.toContain("0 en stock");
+  });
+
+  it("ferme l'encaissement d'un article VERROUILLÉ par un inventaire, en nommant la session", () => {
+    // L'article s'ajoute (proforma possible), mais il ne s'encaisse pas : le
+    // serveur refuse les produits bloqués AVANT de regarder les quantités.
+    const verrous = new Map([["p2", "INV-20261114-0001"]]);
+    const ruptures = lignesEnRupture([ligne(savon, 1)], { verrous });
+    expect(ruptures).toHaveLength(1);
+    expect(ruptures[0].cause).toBe("verrou");
+    expect(ruptures[0].raison).toContain("INV-20261114-0001");
+    expect(panierServable([ligne(savon, 1)], { verrous })).toBe(false);
+    expect(motifsEncaissement([ligne(savon, 1)], { verrous })).toEqual([
+      ruptures[0].raison,
+    ]);
+  });
+
+  it("le verrou passe AVANT la rupture, comme chez le serveur", () => {
+    // Dire « stock insuffisant » sur un article sous inventaire enverrait le
+    // caissier chercher au dépôt une marchandise qui est là, mais interdite.
+    const verrous = new Map([["p2", ""]]);
+    const ruptures = lignesEnRupture([ligne(savon, 99)], { verrous });
+    expect(ruptures.map((r) => r.cause)).toEqual(["verrou"]);
+    expect(ruptures[0].raison).not.toContain("()");
+  });
+
+  it("un verrou sur un AUTRE article ne ferme rien", () => {
+    const verrous = new Map([["autre", "INV-1"]]);
+    expect(panierServable([ligne(savon, 1)], { verrous })).toBe(true);
   });
 
   it("désigne la BONNE ligne quand une seule manque", () => {

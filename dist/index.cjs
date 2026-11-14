@@ -26,6 +26,7 @@ __export(index_exports, {
   MIN_QUANTITY: () => MIN_QUANTITY,
   MONEY_EPS: () => MONEY_EPS,
   NNBSP: () => NNBSP,
+  PERMISSION_VOIR_TOUT: () => PERMISSION_VOIR_TOUT,
   QUANTITY_DECIMALS: () => QUANTITY_DECIMALS,
   QUANTITY_INTEGER_DIGITS: () => QUANTITY_INTEGER_DIGITS,
   ROLE_HIERARCHY: () => ROLE_HIERARCHY,
@@ -43,6 +44,9 @@ __export(index_exports, {
   daysLate: () => daysLate,
   defaultCountryForCurrency: () => defaultCountryForCurrency,
   dueDateLabel: () => dueDateLabel,
+  entrepotsActionnables: () => entrepotsActionnables,
+  entrepotsLisibles: () => entrepotsLisibles,
+  estBorneParAuteur: () => estBorneParAuteur,
   formatDate: () => formatDate,
   formatDateFr: () => formatDateFr,
   formatDateTime: () => formatDateTime,
@@ -72,6 +76,8 @@ __export(index_exports, {
   isAtLeastRole: () => isAtLeastRole,
   isOverdue: () => isOverdue,
   isRole: () => isRole,
+  litTousLesEntrepots: () => litTousLesEntrepots,
+  membreDepuisPermissions: () => membreDepuisPermissions,
   monthLong: () => monthLong,
   monthShort: () => monthShort,
   packageEquivalent: () => packageEquivalent,
@@ -86,6 +92,7 @@ __export(index_exports, {
   splitPackaged: () => splitPackaged,
   toBaseQuantity: () => toBaseQuantity,
   verrouEntrepot: () => verrouEntrepot,
+  verrouUtilisateur: () => verrouUtilisateur,
   weekdayLong: () => weekdayLong
 });
 module.exports = __toCommonJS(index_exports);
@@ -607,21 +614,55 @@ function canManageRole(userPermissions, targetRole) {
 }
 
 // src/perimetre.ts
+var PERMISSION_VOIR_TOUT = "sales.view_all";
+function membreDepuisPermissions(p) {
+  return {
+    role: p?.role ?? null,
+    consulteTout: Boolean(p?.consult_all_warehouses),
+    voitCollegues: Boolean(p?.permissions?.includes(PERMISSION_VOIR_TOUT)),
+    affectes: p?.assigned_warehouses ?? []
+  };
+}
+var actif = (e) => e.is_active !== false;
+function litTousLesEntrepots(m) {
+  return m.role === "owner" || m.consulteTout;
+}
+function estBorneParAuteur(m, nature) {
+  if (m.role === null || m.role === "owner") return false;
+  if (nature === "lecture" && m.consulteTout) return false;
+  return !m.voitCollegues;
+}
+function entrepotsLisibles(m, tous) {
+  if (litTousLesEntrepots(m)) return [...tous];
+  const permis = new Set(m.affectes.map((e) => e.id));
+  return tous.filter((e) => permis.has(e.id));
+}
+function entrepotsActionnables(m, tous) {
+  if (m.role === "owner") return tous.filter(actif);
+  const permis = new Set(m.affectes.filter(actif).map((e) => e.id));
+  return tous.filter((e) => actif(e) && permis.has(e.id));
+}
 var LIBELLES_VERROU_PERIMETRE = {
-  cashier: "Vous ne voyez que vos propres donn\xE9es.",
+  "propres-donnees": "Vous ne voyez que vos propres donn\xE9es.",
   "un-seul-entrepot": "Vous n'avez acc\xE8s qu'\xE0 un seul entrep\xF4t.",
-  "aucun-entrepot": "Aucun entrep\xF4t ne vous est assign\xE9. Demandez-en un au g\xE9rant."
+  "aucun-entrepot": "Aucun entrep\xF4t ne vous est assign\xE9. Demandez-en un au propri\xE9taire.",
+  "entrepot-inactif": "Votre entrep\xF4t est d\xE9sactiv\xE9. Demandez au propri\xE9taire de vous en affecter un autre."
 };
-function verrouEntrepot(role, nombreAccessibles) {
-  if (role === "cashier") return "cashier";
-  if (role === "owner" || role === null) return null;
-  if (nombreAccessibles === 0) return "aucun-entrepot";
-  if (nombreAccessibles === 1) return "un-seul-entrepot";
+function verrouEntrepot(m, nombre, nature = "lecture") {
+  if (m.role === null || m.role === "owner") return null;
+  if (nature === "lecture" && m.consulteTout) return null;
+  if (nombre === 0) {
+    return nature === "action" && m.affectes.length > 0 ? "entrepot-inactif" : "aucun-entrepot";
+  }
+  if (nombre === 1) return "un-seul-entrepot";
   return null;
 }
-function choixEntrepotRecevable(choix, permis, estProprietaire) {
+function verrouUtilisateur(m, nature = "lecture") {
+  return estBorneParAuteur(m, nature) ? "propres-donnees" : null;
+}
+function choixEntrepotRecevable(choix, permis, ouvertATous) {
   if (!choix) return null;
-  if (estProprietaire || permis.has(choix)) return choix;
+  if (ouvertATous || permis.has(choix)) return choix;
   return null;
 }
 
@@ -1311,6 +1352,9 @@ __export(pos_exports, {
   maxGlobalDiscount: () => maxGlobalDiscount,
   maxLoyaltyAmount: () => maxLoyaltyAmount,
   maxUsableCredit: () => maxUsableCredit,
+  motifDuVerrou: () => motifDuVerrou,
+  motifStockInconnu: () => motifStockInconnu,
+  motifsEncaissement: () => motifsEncaissement,
   packagingFactorOf: () => packagingFactorOf,
   panierServable: () => panierServable,
   r2: () => r2,
@@ -1608,7 +1652,7 @@ function inCart(lines2, productId) {
   return ligneDe(lines2, productId)?.quantity ?? 0;
 }
 function addableBase(product, lines2) {
-  if (!product.track_inventory || product.allow_negative_stock) return null;
+  if (!product.track_inventory) return null;
   return Math.max(0, num4(product.stock_quantity) - inCart(lines2, product.id));
 }
 function addableChannels(product, lines2, options = {}) {
@@ -1630,7 +1674,7 @@ function addableChannels(product, lines2, options = {}) {
   );
 }
 function addableSealed(product, lines2, options = {}) {
-  if (!product.track_inventory || product.allow_negative_stock) return null;
+  if (!product.track_inventory) return null;
   return addableChannels(product, lines2, options).sealed;
 }
 function addableLoose(product, lines2, options = {}) {
@@ -1676,27 +1720,44 @@ function verifierAjout(product, lines2, saisie) {
   }
   return { ...base, ok: true, raison: null };
 }
-function lignesEnRupture(lines2) {
+function motifDuVerrou(nomArticle, reference) {
+  const session = reference ? ` (${reference})` : "";
+  return `${nomArticle} est bloqu\xE9 par un inventaire en cours${session}. Attendez la fin de l'inventaire pour l'encaisser.`;
+}
+function motifStockInconnu(nomArticle) {
+  return `Aucun stock de ${nomArticle} dans cet entrep\xF4t : enregistrez une entr\xE9e de stock avant de l'encaisser.`;
+}
+var stockInconnu = (p) => Boolean(p.track_inventory) && (p.stock_quantity === null || p.stock_quantity === void 0);
+function lignesEnRupture(lines2, options = {}) {
   const ruptures = [];
   lines2.forEach((ligne, index) => {
     if (ligne.quantity < MIN_QUANTITY) return;
+    const name = ligne.product.name || "Cet article";
+    const base = { index, productId: ligne.product.id, name };
+    const reference = options.verrous?.get(ligne.product.id);
+    if (reference !== void 0) {
+      ruptures.push({ ...base, cause: "verrou", raison: motifDuVerrou(name, reference) });
+      return;
+    }
     const autres = lines2.filter((_, i) => i !== index);
     const verdict = verifierAjout(ligne.product, autres, {
       packages: ligne.packageQuantity,
       loose: looseQuantityOf(ligne)
     });
     if (verdict.ok || verdict.raison === null) return;
-    ruptures.push({
-      index,
-      productId: ligne.product.id,
-      name: ligne.product.name || "Cet article",
-      raison: verdict.raison
-    });
+    if (stockInconnu(ligne.product)) {
+      ruptures.push({ ...base, cause: "stock-inconnu", raison: motifStockInconnu(name) });
+      return;
+    }
+    ruptures.push({ ...base, cause: "rupture", raison: verdict.raison });
   });
   return ruptures;
 }
-function panierServable(lines2) {
-  return lignesEnRupture(lines2).length === 0;
+function motifsEncaissement(lines2, options = {}) {
+  return lignesEnRupture(lines2, options).map((r) => r.raison);
+}
+function panierServable(lines2, options = {}) {
+  return lignesEnRupture(lines2, options).length === 0;
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
@@ -1706,6 +1767,7 @@ function panierServable(lines2) {
   MIN_QUANTITY,
   MONEY_EPS,
   NNBSP,
+  PERMISSION_VOIR_TOUT,
   QUANTITY_DECIMALS,
   QUANTITY_INTEGER_DIGITS,
   ROLE_HIERARCHY,
@@ -1723,6 +1785,9 @@ function panierServable(lines2) {
   daysLate,
   defaultCountryForCurrency,
   dueDateLabel,
+  entrepotsActionnables,
+  entrepotsLisibles,
+  estBorneParAuteur,
   formatDate,
   formatDateFr,
   formatDateTime,
@@ -1752,6 +1817,8 @@ function panierServable(lines2) {
   isAtLeastRole,
   isOverdue,
   isRole,
+  litTousLesEntrepots,
+  membreDepuisPermissions,
   monthLong,
   monthShort,
   packageEquivalent,
@@ -1766,6 +1833,7 @@ function panierServable(lines2) {
   splitPackaged,
   toBaseQuantity,
   verrouEntrepot,
+  verrouUtilisateur,
   weekdayLong
 });
 //# sourceMappingURL=index.cjs.map

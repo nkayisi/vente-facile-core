@@ -38,7 +38,7 @@ import {
   splitPackaged,
   toBaseQuantity,
   weekdayLong
-} from "./chunk-BMHMSRY3.js";
+} from "./chunk-MR5DB5MD.js";
 import {
   SUPPORTED_CURRENCIES,
   getCurrencyByCode,
@@ -187,21 +187,55 @@ function canManageRole(userPermissions, targetRole) {
 }
 
 // src/perimetre.ts
+var PERMISSION_VOIR_TOUT = "sales.view_all";
+function membreDepuisPermissions(p) {
+  return {
+    role: p?.role ?? null,
+    consulteTout: Boolean(p?.consult_all_warehouses),
+    voitCollegues: Boolean(p?.permissions?.includes(PERMISSION_VOIR_TOUT)),
+    affectes: p?.assigned_warehouses ?? []
+  };
+}
+var actif = (e) => e.is_active !== false;
+function litTousLesEntrepots(m) {
+  return m.role === "owner" || m.consulteTout;
+}
+function estBorneParAuteur(m, nature) {
+  if (m.role === null || m.role === "owner") return false;
+  if (nature === "lecture" && m.consulteTout) return false;
+  return !m.voitCollegues;
+}
+function entrepotsLisibles(m, tous) {
+  if (litTousLesEntrepots(m)) return [...tous];
+  const permis = new Set(m.affectes.map((e) => e.id));
+  return tous.filter((e) => permis.has(e.id));
+}
+function entrepotsActionnables(m, tous) {
+  if (m.role === "owner") return tous.filter(actif);
+  const permis = new Set(m.affectes.filter(actif).map((e) => e.id));
+  return tous.filter((e) => actif(e) && permis.has(e.id));
+}
 var LIBELLES_VERROU_PERIMETRE = {
-  cashier: "Vous ne voyez que vos propres donn\xE9es.",
+  "propres-donnees": "Vous ne voyez que vos propres donn\xE9es.",
   "un-seul-entrepot": "Vous n'avez acc\xE8s qu'\xE0 un seul entrep\xF4t.",
-  "aucun-entrepot": "Aucun entrep\xF4t ne vous est assign\xE9. Demandez-en un au g\xE9rant."
+  "aucun-entrepot": "Aucun entrep\xF4t ne vous est assign\xE9. Demandez-en un au propri\xE9taire.",
+  "entrepot-inactif": "Votre entrep\xF4t est d\xE9sactiv\xE9. Demandez au propri\xE9taire de vous en affecter un autre."
 };
-function verrouEntrepot(role, nombreAccessibles) {
-  if (role === "cashier") return "cashier";
-  if (role === "owner" || role === null) return null;
-  if (nombreAccessibles === 0) return "aucun-entrepot";
-  if (nombreAccessibles === 1) return "un-seul-entrepot";
+function verrouEntrepot(m, nombre, nature = "lecture") {
+  if (m.role === null || m.role === "owner") return null;
+  if (nature === "lecture" && m.consulteTout) return null;
+  if (nombre === 0) {
+    return nature === "action" && m.affectes.length > 0 ? "entrepot-inactif" : "aucun-entrepot";
+  }
+  if (nombre === 1) return "un-seul-entrepot";
   return null;
 }
-function choixEntrepotRecevable(choix, permis, estProprietaire) {
+function verrouUtilisateur(m, nature = "lecture") {
+  return estBorneParAuteur(m, nature) ? "propres-donnees" : null;
+}
+function choixEntrepotRecevable(choix, permis, ouvertATous) {
   if (!choix) return null;
-  if (estProprietaire || permis.has(choix)) return choix;
+  if (ouvertATous || permis.has(choix)) return choix;
   return null;
 }
 
@@ -241,6 +275,7 @@ export {
   MIN_QUANTITY,
   MONEY_EPS,
   NNBSP,
+  PERMISSION_VOIR_TOUT,
   QUANTITY_DECIMALS,
   QUANTITY_INTEGER_DIGITS,
   ROLE_HIERARCHY,
@@ -258,6 +293,9 @@ export {
   daysLate,
   defaultCountryForCurrency,
   dueDateLabel,
+  entrepotsActionnables,
+  entrepotsLisibles,
+  estBorneParAuteur,
   formatDate,
   formatDateFr,
   formatDateTime,
@@ -287,6 +325,8 @@ export {
   isAtLeastRole,
   isOverdue,
   isRole,
+  litTousLesEntrepots,
+  membreDepuisPermissions,
   monthLong,
   monthShort,
   packageEquivalent,
@@ -301,6 +341,7 @@ export {
   splitPackaged,
   toBaseQuantity,
   verrouEntrepot,
+  verrouUtilisateur,
   weekdayLong
 };
 //# sourceMappingURL=index.js.map
