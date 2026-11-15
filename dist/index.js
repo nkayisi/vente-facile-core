@@ -215,6 +215,25 @@ function entrepotsActionnables(m, tous) {
   const permis = new Set(m.affectes.filter(actif).map((e) => e.id));
   return tous.filter((e) => actif(e) && permis.has(e.id));
 }
+var LIBELLES_CASES_PERIMETRE = {
+  voirTout: {
+    titre: "Voir tout dans son entrep\xF4t",
+    aide: "Voir le travail de ses coll\xE8gues (ventes, d\xE9penses, caisse, retours, devis), dans les entrep\xF4ts qui lui sont affect\xE9s, jamais ailleurs."
+  },
+  consulterTous: {
+    titre: "Consulter tous les entrep\xF4ts",
+    aide: "Lire les donn\xE9es de tous les entrep\xF4ts, quel qu'en soit l'auteur. Il n'agit toujours que dans ses entrep\xF4ts."
+  }
+};
+function afficheFiltreEntrepot(m) {
+  return m.role !== null && litTousLesEntrepots(m);
+}
+function afficheFiltreUtilisateur(m) {
+  return m.role !== null && !estBorneParAuteur(m, "lecture");
+}
+function afficheFiltresPerimetre(m) {
+  return afficheFiltreEntrepot(m) || afficheFiltreUtilisateur(m);
+}
 var LIBELLES_VERROU_PERIMETRE = {
   "propres-donnees": "Vous ne voyez que vos propres donn\xE9es.",
   "un-seul-entrepot": "Vous n'avez acc\xE8s qu'\xE0 un seul entrep\xF4t.",
@@ -270,6 +289,7 @@ function dueDateLabel(dueDate) {
 }
 export {
   DEFAULT_COUNTRY,
+  LIBELLES_CASES_PERIMETRE,
   LIBELLES_VERROU_PERIMETRE,
   MAX_QUANTITY,
   MIN_QUANTITY,
@@ -282,6 +302,9 @@ export {
   ROLE_LABELS,
   SUPPORTED_COUNTRIES,
   SUPPORTED_CURRENCIES,
+  afficheFiltreEntrepot,
+  afficheFiltreUtilisateur,
+  afficheFiltresPerimetre,
   availableBase,
   availableSplit,
   blendedUnitCost,

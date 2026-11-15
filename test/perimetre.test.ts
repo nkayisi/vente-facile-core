@@ -8,7 +8,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  afficheFiltreEntrepot,
+  afficheFiltresPerimetre,
+  afficheFiltreUtilisateur,
   choixEntrepotRecevable,
+  LIBELLES_CASES_PERIMETRE,
   entrepotsActionnables,
   entrepotsLisibles,
   estBorneParAuteur,
@@ -219,5 +223,36 @@ describe("choixEntrepotRecevable", () => {
   it("l'absence de choix n'est pas un choix", () => {
     expect(choixEntrepotRecevable(null, permis, true)).toBeNull();
     expect(choixEntrepotRecevable("", permis, true)).toBeNull();
+  });
+});
+
+describe("quels champs de filtre s'affichent", () => {
+  it("le champ Entrepôt n'est montré qu'au propriétaire et à la case « Consulter tous »", () => {
+    expect(afficheFiltreEntrepot(membre({ role: "owner", affectes: [] }))).toBe(true);
+    expect(afficheFiltreEntrepot(membre({ consulteTout: true }))).toBe(true);
+    // Même un gérant affecté à plusieurs dépôts ne choisit pas sans la case.
+    expect(afficheFiltreEntrepot(membre({ affectes: [A, B] }))).toBe(false);
+    expect(afficheFiltreEntrepot(membre({ role: "cashier", voitCollegues: false }))).toBe(false);
+  });
+
+  it("le champ Utilisateur n'est montré qu'à qui voit ses collègues", () => {
+    expect(afficheFiltreUtilisateur(membre({ role: "owner", affectes: [] }))).toBe(true);
+    expect(afficheFiltreUtilisateur(membre({ role: "cashier", voitCollegues: true }))).toBe(true);
+    expect(afficheFiltreUtilisateur(membre({ role: "cashier", voitCollegues: false, consulteTout: true }))).toBe(true);
+    expect(afficheFiltreUtilisateur(membre({ role: "cashier", voitCollegues: false }))).toBe(false);
+  });
+
+  it("sans aucune des deux options, le composant n'apparaît pas", () => {
+    expect(afficheFiltresPerimetre(membre({ role: "cashier", voitCollegues: false }))).toBe(false);
+    expect(afficheFiltresPerimetre(membre({ role: "cashier", voitCollegues: true }))).toBe(true);
+  });
+
+  it("un rôle inconnu ne montre rien", () => {
+    expect(afficheFiltresPerimetre(membre({ role: null }))).toBe(false);
+  });
+
+  it("« Voir tout » dit désormais son périmètre", () => {
+    expect(LIBELLES_CASES_PERIMETRE.voirTout.titre).toBe("Voir tout dans son entrepôt");
+    expect(LIBELLES_CASES_PERIMETRE.consulterTous.titre).toBe("Consulter tous les entrepôts");
   });
 });

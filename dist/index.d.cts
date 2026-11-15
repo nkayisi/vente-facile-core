@@ -368,6 +368,55 @@ declare function entrepotsActionnables<T extends {
     id: string;
     is_active?: boolean;
 }>(m: MembrePerimetre, tous: readonly T[]): T[];
+/**
+ * Les deux cases qu'on règle sur un membre, et ce qu'elles ouvrent.
+ *
+ * ⚠ « Voir tout » tout court laissait croire à TOUT voir, partout. Il ouvre le
+ * travail des COLLÈGUES, dans les entrepôts du membre et nulle part ailleurs :
+ * c'est « Consulter tous les entrepôts » qui ouvre les autres dépôts. Les deux
+ * surfaces lisent ces libellés ici, pour ne pas les dire de deux façons.
+ */
+declare const LIBELLES_CASES_PERIMETRE: {
+    readonly voirTout: {
+        readonly titre: "Voir tout dans son entrepôt";
+        readonly aide: string;
+    };
+    readonly consulterTous: {
+        readonly titre: "Consulter tous les entrepôts";
+        readonly aide: string;
+    };
+};
+/**
+ * Le champ « Entrepôt » d'un filtre s'affiche-t-il ?
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ UN CHAMP QU'ON NE PEUT PAS CHANGER N'A PAS À ÊTRE MONTRÉ.               │
+ * │                                                                          │
+ * │ Seuls le propriétaire et un membre à qui l'on a coché « Consulter tous   │
+ * │ les entrepôts » choisissent l'entrepôt qu'ils regardent. Pour tous les   │
+ * │ autres, le champ n'apparaît pas : un champ fermé avec son motif occupait │
+ * │ la feuille pour dire une chose que le membre n'a pas à décider.          │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * ⚠ Masquer n'est pas lever : le périmètre continue de s'appliquer, au serveur
+ * comme sur le terminal. Un rôle inconnu ne montre rien.
+ */
+declare function afficheFiltreEntrepot(m: MembrePerimetre): boolean;
+/**
+ * Le champ « Utilisateur » d'un filtre s'affiche-t-il ?
+ *
+ * Seulement pour qui VOIT le travail de ses collègues : le propriétaire, la
+ * case « Voir tout dans son entrepôt » (`sales.view_all`, que le gérant et le
+ * magasinier ont par leur rôle) et la case « Consulter tous les entrepôts ».
+ * Un membre qui ne voit que ses propres données n'a personne à choisir.
+ */
+declare function afficheFiltreUtilisateur(m: MembrePerimetre): boolean;
+/**
+ * Faut-il montrer le composant de filtres de périmètre ? Faux quand aucun de
+ * ses deux champs ne s'affiche : un membre sans aucune des deux options n'a
+ * rien à y régler.
+ */
+declare function afficheFiltresPerimetre(m: MembrePerimetre): boolean;
 /** Pourquoi un filtre est fermé. `null` : il est ouvert. */
 type MotifVerrouPerimetre = 'propres-donnees' | 'un-seul-entrepot' | 'aucun-entrepot' | 'entrepot-inactif';
 /**
@@ -417,4 +466,4 @@ declare function daysLate(dueDate?: string | null): number;
 /** Libellé court : « En retard de 5 j », « Échoit dans 3 j », « Échoit aujourd'hui ». */
 declare function dueDateLabel(dueDate?: string | null): string | null;
 
-export { type CountryOption, type CurrencyOption, DEFAULT_COUNTRY, type EntrepotDuMembre, LIBELLES_VERROU_PERIMETRE, type ManageableRole, type Margin, type MembrePerimetre, type MotifVerrouPerimetre, NNBSP, type NaturePerimetre, PERMISSION_VOIR_TOUT, ROLE_HIERARCHY, ROLE_LABELS, type Role, SUPPORTED_COUNTRIES, SUPPORTED_CURRENCIES, type UserPermissions, blendedUnitCost, canManageRole, choixEntrepotRecevable, computeMargin, daysLate, defaultCountryForCurrency, dueDateLabel, entrepotsActionnables, entrepotsLisibles, estBorneParAuteur, formatDate, formatDateFr, formatDateTime, formatDateTimeFr, formatDecimal, formatFixedFr, formatNumber, formatNumberFr, formatPercent, formatPrice, formatPriceValue, formatTimeFr, getCountryByValue, getCurrencyByCode, getCurrencyName, getCurrencySymbol, getDefaultCurrency, hasAllPermissions, hasAnyPermission, hasPermission, isAtLeastRole, isOverdue, isRole, litTousLesEntrepots, membreDepuisPermissions, monthLong, monthShort, packageEquivalent, pluralizeUnit, retailEquivalent, setDefaultCurrency, verrouEntrepot, verrouUtilisateur, weekdayLong };
+export { type CountryOption, type CurrencyOption, DEFAULT_COUNTRY, type EntrepotDuMembre, LIBELLES_CASES_PERIMETRE, LIBELLES_VERROU_PERIMETRE, type ManageableRole, type Margin, type MembrePerimetre, type MotifVerrouPerimetre, NNBSP, type NaturePerimetre, PERMISSION_VOIR_TOUT, ROLE_HIERARCHY, ROLE_LABELS, type Role, SUPPORTED_COUNTRIES, SUPPORTED_CURRENCIES, type UserPermissions, afficheFiltreEntrepot, afficheFiltreUtilisateur, afficheFiltresPerimetre, blendedUnitCost, canManageRole, choixEntrepotRecevable, computeMargin, daysLate, defaultCountryForCurrency, dueDateLabel, entrepotsActionnables, entrepotsLisibles, estBorneParAuteur, formatDate, formatDateFr, formatDateTime, formatDateTimeFr, formatDecimal, formatFixedFr, formatNumber, formatNumberFr, formatPercent, formatPrice, formatPriceValue, formatTimeFr, getCountryByValue, getCurrencyByCode, getCurrencyName, getCurrencySymbol, getDefaultCurrency, hasAllPermissions, hasAnyPermission, hasPermission, isAtLeastRole, isOverdue, isRole, litTousLesEntrepots, membreDepuisPermissions, monthLong, monthShort, packageEquivalent, pluralizeUnit, retailEquivalent, setDefaultCurrency, verrouEntrepot, verrouUtilisateur, weekdayLong };

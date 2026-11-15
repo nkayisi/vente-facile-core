@@ -129,6 +129,69 @@ export function entrepotsActionnables<T extends { id: string; is_active?: boolea
   return tous.filter((e) => actif(e) && permis.has(e.id));
 }
 
+/**
+ * Les deux cases qu'on règle sur un membre, et ce qu'elles ouvrent.
+ *
+ * ⚠ « Voir tout » tout court laissait croire à TOUT voir, partout. Il ouvre le
+ * travail des COLLÈGUES, dans les entrepôts du membre et nulle part ailleurs :
+ * c'est « Consulter tous les entrepôts » qui ouvre les autres dépôts. Les deux
+ * surfaces lisent ces libellés ici, pour ne pas les dire de deux façons.
+ */
+export const LIBELLES_CASES_PERIMETRE = {
+  voirTout: {
+    titre: "Voir tout dans son entrepôt",
+    aide:
+      "Voir le travail de ses collègues (ventes, dépenses, caisse, retours, devis), " +
+      "dans les entrepôts qui lui sont affectés, jamais ailleurs.",
+  },
+  consulterTous: {
+    titre: "Consulter tous les entrepôts",
+    aide:
+      "Lire les données de tous les entrepôts, quel qu'en soit l'auteur. " +
+      "Il n'agit toujours que dans ses entrepôts.",
+  },
+} as const;
+
+/**
+ * Le champ « Entrepôt » d'un filtre s'affiche-t-il ?
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ UN CHAMP QU'ON NE PEUT PAS CHANGER N'A PAS À ÊTRE MONTRÉ.               │
+ * │                                                                          │
+ * │ Seuls le propriétaire et un membre à qui l'on a coché « Consulter tous   │
+ * │ les entrepôts » choisissent l'entrepôt qu'ils regardent. Pour tous les   │
+ * │ autres, le champ n'apparaît pas : un champ fermé avec son motif occupait │
+ * │ la feuille pour dire une chose que le membre n'a pas à décider.          │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * ⚠ Masquer n'est pas lever : le périmètre continue de s'appliquer, au serveur
+ * comme sur le terminal. Un rôle inconnu ne montre rien.
+ */
+export function afficheFiltreEntrepot(m: MembrePerimetre): boolean {
+  return m.role !== null && litTousLesEntrepots(m);
+}
+
+/**
+ * Le champ « Utilisateur » d'un filtre s'affiche-t-il ?
+ *
+ * Seulement pour qui VOIT le travail de ses collègues : le propriétaire, la
+ * case « Voir tout dans son entrepôt » (`sales.view_all`, que le gérant et le
+ * magasinier ont par leur rôle) et la case « Consulter tous les entrepôts ».
+ * Un membre qui ne voit que ses propres données n'a personne à choisir.
+ */
+export function afficheFiltreUtilisateur(m: MembrePerimetre): boolean {
+  return m.role !== null && !estBorneParAuteur(m, "lecture");
+}
+
+/**
+ * Faut-il montrer le composant de filtres de périmètre ? Faux quand aucun de
+ * ses deux champs ne s'affiche : un membre sans aucune des deux options n'a
+ * rien à y régler.
+ */
+export function afficheFiltresPerimetre(m: MembrePerimetre): boolean {
+  return afficheFiltreEntrepot(m) || afficheFiltreUtilisateur(m);
+}
+
 /** Pourquoi un filtre est fermé. `null` : il est ouvert. */
 export type MotifVerrouPerimetre =
   | 'propres-donnees'
