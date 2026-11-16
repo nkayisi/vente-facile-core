@@ -8,6 +8,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CHOIX_TOUS,
+  caseConsulterTousUtile,
+  caseVoirToutUtile,
+  defautDuPerimetre,
+  libelleDefautEntrepot,
+  libelleDefautUtilisateur,
+  parametresDuChoix,
+  proposeTousLesEntrepots,
+  proposeTousLesUtilisateurs,
   afficheFiltreEntrepot,
   afficheFiltresPerimetre,
   afficheFiltreUtilisateur,
@@ -227,12 +236,15 @@ describe("choixEntrepotRecevable", () => {
 });
 
 describe("quels champs de filtre s'affichent", () => {
-  it("le champ Entrepôt n'est montré qu'au propriétaire et à la case « Consulter tous »", () => {
+  it("le champ Entrepôt : propriétaire, case « Consulter tous », ou plusieurs entrepôts", () => {
     expect(afficheFiltreEntrepot(membre({ role: "owner", affectes: [] }))).toBe(true);
     expect(afficheFiltreEntrepot(membre({ consulteTout: true }))).toBe(true);
-    // Même un gérant affecté à plusieurs dépôts ne choisit pas sans la case.
-    expect(afficheFiltreEntrepot(membre({ affectes: [A, B] }))).toBe(false);
-    expect(afficheFiltreEntrepot(membre({ role: "cashier", voitCollegues: false }))).toBe(false);
+    // Un gérant de plusieurs dépôts garde le filtre, limité aux siens.
+    expect(afficheFiltreEntrepot(membre({ affectes: [A, B] }))).toBe(true);
+    // Un seul dépôt : rien à choisir.
+    expect(afficheFiltreEntrepot(membre({ affectes: [A] }))).toBe(false);
+    // Un caissier sans case ne choisit jamais, même sur deux dépôts.
+    expect(afficheFiltreEntrepot(membre({ role: "cashier", voitCollegues: false, affectes: [A, B] }))).toBe(false);
   });
 
   it("le champ Utilisateur n'est montré qu'à qui voit ses collègues", () => {
@@ -254,5 +266,91 @@ describe("quels champs de filtre s'affichent", () => {
   it("« Voir tout » dit désormais son périmètre", () => {
     expect(LIBELLES_CASES_PERIMETRE.voirTout.titre).toBe("Voir tout dans son entrepôt");
     expect(LIBELLES_CASES_PERIMETRE.consulterTous.titre).toBe("Consulter tous les entrepôts");
+  });
+});
+
+describe("ce que chaque rôle voit par défaut (2026-11-16)", () => {
+  it("le propriétaire voit tout l'établissement", () => {
+    expect(defautDuPerimetre(membre({ role: "owner", affectes: [] }))).toEqual({
+      entrepots: null,
+      auteurBorne: false,
+    });
+  });
+
+  it("le gérant et le magasinier voient toutes les données de leurs entrepôts", () => {
+    expect(defautDuPerimetre(membre())).toEqual({ entrepots: null, auteurBorne: false });
+    expect(defautDuPerimetre(membre({ role: "stock_keeper" }))).toEqual({
+      entrepots: null,
+      auteurBorne: false,
+    });
+  });
+
+  it("la case « Consulter tous » ne change PAS le défaut : ses entrepôts", () => {
+    expect(defautDuPerimetre(membre({ consulteTout: true, affectes: [A, B] }))).toEqual({
+      entrepots: ["a", "b"],
+      auteurBorne: false,
+    });
+  });
+
+  it("le caissier ne voit que ses données, quelles que soient ses cases", () => {
+    for (const cases of [
+      {},
+      { voitCollegues: true },
+      { consulteTout: true },
+      { voitCollegues: true, consulteTout: true },
+    ]) {
+      expect(defautDuPerimetre(membre({ role: "cashier", voitCollegues: false, ...cases })).auteurBorne).toBe(true);
+    }
+  });
+
+  it("un rôle inconnu n'invente aucune borne", () => {
+    expect(defautDuPerimetre(membre({ role: null }))).toEqual({ entrepots: null, auteurBorne: false });
+  });
+});
+
+describe("les choix qui élargissent", () => {
+  it("« Tous les entrepôts » n'est proposé qu'à la case, jamais au propriétaire", () => {
+    expect(proposeTousLesEntrepots(membre({ consulteTout: true }))).toBe(true);
+    expect(proposeTousLesEntrepots(membre({ role: "owner", consulteTout: true }))).toBe(false);
+    expect(proposeTousLesEntrepots(membre({ affectes: [A, B] }))).toBe(false);
+  });
+
+  it("« Tous les utilisateurs » n'est proposé qu'au caissier qui a une case", () => {
+    expect(proposeTousLesUtilisateurs(membre({ role: "cashier", voitCollegues: true }))).toBe(true);
+    expect(proposeTousLesUtilisateurs(membre({ role: "cashier", voitCollegues: false, consulteTout: true }))).toBe(true);
+    expect(proposeTousLesUtilisateurs(membre({ role: "cashier", voitCollegues: false }))).toBe(false);
+    // Le gérant voit déjà tout le monde par défaut.
+    expect(proposeTousLesUtilisateurs(membre())).toBe(false);
+  });
+
+  it("le défaut se nomme", () => {
+    expect(libelleDefautEntrepot(membre({ role: "owner" }))).toBe("Tous les entrepôts");
+    expect(libelleDefautEntrepot(membre({ affectes: [A, B] }))).toBe("Mes entrepôts");
+    expect(libelleDefautUtilisateur(membre({ role: "cashier", voitCollegues: true }))).toBe("Moi uniquement");
+    expect(libelleDefautUtilisateur(membre())).toBe("Tous les utilisateurs");
+  });
+
+  it("le défaut n'envoie RIEN, « tous » envoie le drapeau, un choix envoie l'identifiant", () => {
+    expect(parametresDuChoix({ entrepot: null, utilisateur: null })).toEqual({});
+    expect(parametresDuChoix({ entrepot: CHOIX_TOUS, utilisateur: CHOIX_TOUS })).toEqual({
+      all_warehouses: "1",
+      all_users: "1",
+    });
+    expect(parametresDuChoix({ entrepot: "a", utilisateur: "u" })).toEqual({ warehouse: "a", user: "u" });
+  });
+
+  it("« Tous les entrepôts » n'est recevable que pour qui lit partout", () => {
+    expect(choixEntrepotRecevable(CHOIX_TOUS, new Set(["a"]), true)).toBe(CHOIX_TOUS);
+    expect(choixEntrepotRecevable(CHOIX_TOUS, new Set(["a"]), false)).toBeNull();
+  });
+
+  it("« Voir tout dans son entrepôt » n'a de sens que pour un caissier", () => {
+    expect(caseVoirToutUtile("cashier")).toBe(true);
+    expect(caseVoirToutUtile("manager")).toBe(false);
+    expect(caseVoirToutUtile("stock_keeper")).toBe(false);
+    expect(caseVoirToutUtile("owner")).toBe(false);
+    expect(caseConsulterTousUtile("owner")).toBe(false);
+    expect(caseConsulterTousUtile("cashier")).toBe(true);
+    expect(caseConsulterTousUtile("manager")).toBe(true);
   });
 });

@@ -7,10 +7,26 @@
  * │                                                                          │
  * │ Par défaut, un membre est ISOLÉ dans ses entrepôts affectés : il lit et  │
  * │ il agit là, et nulle part ailleurs. Le propriétaire peut, membre par     │
- * │ membre, cocher « Consulter tous les entrepôts » : ce membre LIT alors    │
- * │ tout, partout et quel qu'en soit l'auteur, mais il n'AGIT toujours que   │
- * │ dans ses entrepôts. C'est la règle du serveur                            │
+ * │ membre, cocher « Consulter tous les entrepôts » : ce membre PEUT alors   │
+ * │ lire tout, partout et quel qu'en soit l'auteur, mais il n'AGIT toujours  │
+ * │ que dans ses entrepôts. C'est la règle du serveur                        │
  * │ (`apps/core/warehouse_scope.py`), et ce module en est le miroir.         │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ CE QU'ON PEUT LIRE N'EST PAS CE QU'ON VOIT PAR DÉFAUT (2026-11-16).     │
+ * │                                                                          │
+ * │ - Le PROPRIÉTAIRE voit tout l'établissement.                             │
+ * │ - Le GÉRANT et le MAGASINIER voient toutes les données de leurs          │
+ * │   entrepôts.                                                             │
+ * │ - Le CAISSIER ne voit que SES données.                                   │
+ * │                                                                          │
+ * │ Les deux cases n'élargissent que sur FILTRE explicite : « Voir tout dans │
+ * │ son entrepôt » laisse le caissier choisir un collègue ou « Tous les      │
+ * │ utilisateurs » ; « Consulter tous les entrepôts » laisse choisir un      │
+ * │ autre entrepôt ou « Tous les entrepôts ». Sans filtre, l'écran reste au  │
+ * │ défaut : c'est `defautDuPerimetre`, et le serveur applique le même       │
+ * │ défaut à toute liste qui ne demande rien de plus.                        │
  * └──────────────────────────────────────────────────────────────────────────┘
  *
  * ┌──────────────────────────────────────────────────────────────────────────┐
@@ -141,16 +157,121 @@ export const LIBELLES_CASES_PERIMETRE = {
   voirTout: {
     titre: "Voir tout dans son entrepôt",
     aide:
-      "Voir le travail de ses collègues (ventes, dépenses, caisse, retours, devis), " +
-      "dans les entrepôts qui lui sont affectés, jamais ailleurs.",
+      "Par défaut, un caissier ne voit que ses propres données. Cochée, il peut " +
+      "afficher par le filtre le travail de ses collègues (ventes, dépenses, " +
+      "caisse, retours, devis), dans ses entrepôts seulement.",
   },
   consulterTous: {
     titre: "Consulter tous les entrepôts",
     aide:
-      "Lire les données de tous les entrepôts, quel qu'en soit l'auteur. " +
-      "Il n'agit toujours que dans ses entrepôts.",
+      "Par défaut, il voit ses entrepôts. Cochée, il peut afficher par le " +
+      "filtre les données d'un autre entrepôt ou de tous, quel qu'en soit " +
+      "l'auteur. Il n'agit toujours que dans ses entrepôts.",
   },
 } as const;
+
+/**
+ * La case « Voir tout dans son entrepôt » a-t-elle un sens pour ce rôle ?
+ *
+ * Seulement pour un CAISSIER : le gérant et le magasinier voient déjà tout le
+ * travail de leurs entrepôts par leur rôle, et le propriétaire tout.
+ */
+export function caseVoirToutUtile(role: Role | null | undefined): boolean {
+  return role === "cashier";
+}
+
+/**
+ * La case « Consulter tous les entrepôts » a-t-elle un sens pour ce rôle ?
+ * Pour tous, sauf le propriétaire, qui voit déjà tout l'établissement.
+ */
+export function caseConsulterTousUtile(role: Role | null | undefined): boolean {
+  return Boolean(role) && role !== "owner";
+}
+
+/**
+ * Le choix qui ÉLARGIT au-delà du défaut : « Tous les entrepôts » ou « Tous
+ * les utilisateurs ». `null` est le défaut, un identifiant un choix précis.
+ *
+ * ⚠ Distinct de `null` parce que le défaut n'est pas toujours « tout » : pour
+ * un caissier, `null` veut dire « mes données », et « Tous les utilisateurs »
+ * est un geste qu'il fait exprès.
+ */
+export const CHOIX_TOUS = "*";
+
+/** Ce qu'un membre voit SANS RIEN CHOISIR. */
+export interface DefautPerimetre {
+  /**
+   * `null` : aucune borne au-delà de son périmètre. Sinon ses entrepôts : c'est
+   * le cas d'un membre qui PEUT lire tous les entrepôts (la case) mais ne le
+   * fait que sur filtre.
+   */
+  entrepots: string[] | null;
+  /** Vrai : par défaut, il ne voit que ses propres lignes. */
+  auteurBorne: boolean;
+}
+
+/**
+ * Le défaut d'un membre. Un rôle inconnu n'invente aucune borne : le serveur
+ * reste seul juge.
+ */
+export function defautDuPerimetre(m: MembrePerimetre): DefautPerimetre {
+  if (m.role === null || m.role === "owner") {
+    return { entrepots: null, auteurBorne: false };
+  }
+  return {
+    entrepots: m.consulteTout ? m.affectes.map((e) => e.id) : null,
+    auteurBorne: m.role === "cashier" || estBorneParAuteur(m, "lecture"),
+  };
+}
+
+/**
+ * Le filtre peut-il proposer « Tous les entrepôts » comme choix EXPLICITE ?
+ * Pour la case « Consulter tous », dont le défaut reste ses entrepôts. Le
+ * propriétaire n'en a pas besoin : son défaut est déjà tout.
+ */
+export function proposeTousLesEntrepots(m: MembrePerimetre): boolean {
+  return m.role !== null && m.role !== "owner" && m.consulteTout;
+}
+
+/**
+ * Le filtre peut-il proposer « Tous les utilisateurs » comme choix EXPLICITE ?
+ * Pour qui est borné à ses lignes par défaut mais a le droit de voir celles
+ * des autres : le caissier qui a l'une des deux cases.
+ */
+export function proposeTousLesUtilisateurs(m: MembrePerimetre): boolean {
+  return defautDuPerimetre(m).auteurBorne && afficheFiltreUtilisateur(m);
+}
+
+/** Ce qu'on lit sur le champ quand rien n'est choisi : le défaut, nommé. */
+export function libelleDefautEntrepot(m: MembrePerimetre): string {
+  return m.role === "owner" ? "Tous les entrepôts" : "Mes entrepôts";
+}
+
+export function libelleDefautUtilisateur(m: MembrePerimetre): string {
+  return defautDuPerimetre(m).auteurBorne ? "Moi uniquement" : "Tous les utilisateurs";
+}
+
+/** Le libellé du choix explicite qui élargit. */
+export const LIBELLE_TOUS_ENTREPOTS = "Tous les entrepôts";
+export const LIBELLE_TOUS_UTILISATEURS = "Tous les utilisateurs";
+
+/**
+ * Les paramètres de requête d'un choix, pour le serveur.
+ *
+ * `null` : rien n'est envoyé, le serveur applique le DÉFAUT. `CHOIX_TOUS` :
+ * `all_warehouses` / `all_users`. Un identifiant : `warehouse` / `user`.
+ */
+export function parametresDuChoix(choix: {
+  entrepot: string | null;
+  utilisateur: string | null;
+}): { warehouse?: string; all_warehouses?: "1"; user?: string; all_users?: "1" } {
+  const p: { warehouse?: string; all_warehouses?: "1"; user?: string; all_users?: "1" } = {};
+  if (choix.entrepot === CHOIX_TOUS) p.all_warehouses = "1";
+  else if (choix.entrepot) p.warehouse = choix.entrepot;
+  if (choix.utilisateur === CHOIX_TOUS) p.all_users = "1";
+  else if (choix.utilisateur) p.user = choix.utilisateur;
+  return p;
+}
 
 /**
  * Le champ « Entrepôt » d'un filtre s'affiche-t-il ?
@@ -158,17 +279,21 @@ export const LIBELLES_CASES_PERIMETRE = {
  * ┌──────────────────────────────────────────────────────────────────────────┐
  * │ UN CHAMP QU'ON NE PEUT PAS CHANGER N'A PAS À ÊTRE MONTRÉ.               │
  * │                                                                          │
- * │ Seuls le propriétaire et un membre à qui l'on a coché « Consulter tous   │
- * │ les entrepôts » choisissent l'entrepôt qu'ils regardent. Pour tous les   │
- * │ autres, le champ n'apparaît pas : un champ fermé avec son motif occupait │
- * │ la feuille pour dire une chose que le membre n'a pas à décider.          │
+ * │ - le propriétaire et la case « Consulter tous les entrepôts » : oui ;   │
+ * │ - un membre de PLUSIEURS entrepôts : oui, limité aux siens ;            │
+ * │ - un caissier sans aucune case : jamais, il n'a rien à choisir ;        │
+ * │ - un membre d'un seul entrepôt : non, choisir entre une seule chose     │
+ * │   n'est pas un choix.                                                   │
  * └──────────────────────────────────────────────────────────────────────────┘
  *
  * ⚠ Masquer n'est pas lever : le périmètre continue de s'appliquer, au serveur
  * comme sur le terminal. Un rôle inconnu ne montre rien.
  */
 export function afficheFiltreEntrepot(m: MembrePerimetre): boolean {
-  return m.role !== null && litTousLesEntrepots(m);
+  if (m.role === null) return false;
+  if (litTousLesEntrepots(m)) return true;
+  if (m.role === "cashier" && !m.voitCollegues) return false;
+  return m.affectes.length >= 2;
 }
 
 /**
@@ -264,6 +389,8 @@ export function choixEntrepotRecevable(
   ouvertATous: boolean
 ): string | null {
   if (!choix) return null;
+  // « Tous les entrepôts » n'est recevable que pour qui peut lire partout.
+  if (choix === CHOIX_TOUS) return ouvertATous ? CHOIX_TOUS : null;
   if (ouvertATous || permis.has(choix)) return choix;
   return null;
 }

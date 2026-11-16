@@ -20,9 +20,12 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var index_exports = {};
 __export(index_exports, {
+  CHOIX_TOUS: () => CHOIX_TOUS,
   DEFAULT_COUNTRY: () => DEFAULT_COUNTRY,
   LIBELLES_CASES_PERIMETRE: () => LIBELLES_CASES_PERIMETRE,
   LIBELLES_VERROU_PERIMETRE: () => LIBELLES_VERROU_PERIMETRE,
+  LIBELLE_TOUS_ENTREPOTS: () => LIBELLE_TOUS_ENTREPOTS,
+  LIBELLE_TOUS_UTILISATEURS: () => LIBELLE_TOUS_UTILISATEURS,
   MAX_QUANTITY: () => MAX_QUANTITY,
   MIN_QUANTITY: () => MIN_QUANTITY,
   MONEY_EPS: () => MONEY_EPS,
@@ -41,12 +44,15 @@ __export(index_exports, {
   availableSplit: () => availableSplit,
   blendedUnitCost: () => blendedUnitCost,
   canManageRole: () => canManageRole,
+  caseConsulterTousUtile: () => caseConsulterTousUtile,
+  caseVoirToutUtile: () => caseVoirToutUtile,
   choixEntrepotRecevable: () => choixEntrepotRecevable,
   computeMargin: () => computeMargin,
   createCurrencyTable: () => createCurrencyTable,
   createMoneyHelpers: () => createMoneyHelpers,
   daysLate: () => daysLate,
   defaultCountryForCurrency: () => defaultCountryForCurrency,
+  defautDuPerimetre: () => defautDuPerimetre,
   dueDateLabel: () => dueDateLabel,
   entrepotsActionnables: () => entrepotsActionnables,
   entrepotsLisibles: () => entrepotsLisibles,
@@ -80,13 +86,18 @@ __export(index_exports, {
   isAtLeastRole: () => isAtLeastRole,
   isOverdue: () => isOverdue,
   isRole: () => isRole,
+  libelleDefautEntrepot: () => libelleDefautEntrepot,
+  libelleDefautUtilisateur: () => libelleDefautUtilisateur,
   litTousLesEntrepots: () => litTousLesEntrepots,
   membreDepuisPermissions: () => membreDepuisPermissions,
   monthLong: () => monthLong,
   monthShort: () => monthShort,
   packageEquivalent: () => packageEquivalent,
+  parametresDuChoix: () => parametresDuChoix,
   pluralizeUnit: () => pluralizeUnit,
   pos: () => pos_exports,
+  proposeTousLesEntrepots: () => proposeTousLesEntrepots,
+  proposeTousLesUtilisateurs: () => proposeTousLesUtilisateurs,
   r2: () => r2,
   receipt: () => receipt_exports,
   remainingChannels: () => remainingChannels,
@@ -649,15 +660,56 @@ function entrepotsActionnables(m, tous) {
 var LIBELLES_CASES_PERIMETRE = {
   voirTout: {
     titre: "Voir tout dans son entrep\xF4t",
-    aide: "Voir le travail de ses coll\xE8gues (ventes, d\xE9penses, caisse, retours, devis), dans les entrep\xF4ts qui lui sont affect\xE9s, jamais ailleurs."
+    aide: "Par d\xE9faut, un caissier ne voit que ses propres donn\xE9es. Coch\xE9e, il peut afficher par le filtre le travail de ses coll\xE8gues (ventes, d\xE9penses, caisse, retours, devis), dans ses entrep\xF4ts seulement."
   },
   consulterTous: {
     titre: "Consulter tous les entrep\xF4ts",
-    aide: "Lire les donn\xE9es de tous les entrep\xF4ts, quel qu'en soit l'auteur. Il n'agit toujours que dans ses entrep\xF4ts."
+    aide: "Par d\xE9faut, il voit ses entrep\xF4ts. Coch\xE9e, il peut afficher par le filtre les donn\xE9es d'un autre entrep\xF4t ou de tous, quel qu'en soit l'auteur. Il n'agit toujours que dans ses entrep\xF4ts."
   }
 };
+function caseVoirToutUtile(role) {
+  return role === "cashier";
+}
+function caseConsulterTousUtile(role) {
+  return Boolean(role) && role !== "owner";
+}
+var CHOIX_TOUS = "*";
+function defautDuPerimetre(m) {
+  if (m.role === null || m.role === "owner") {
+    return { entrepots: null, auteurBorne: false };
+  }
+  return {
+    entrepots: m.consulteTout ? m.affectes.map((e) => e.id) : null,
+    auteurBorne: m.role === "cashier" || estBorneParAuteur(m, "lecture")
+  };
+}
+function proposeTousLesEntrepots(m) {
+  return m.role !== null && m.role !== "owner" && m.consulteTout;
+}
+function proposeTousLesUtilisateurs(m) {
+  return defautDuPerimetre(m).auteurBorne && afficheFiltreUtilisateur(m);
+}
+function libelleDefautEntrepot(m) {
+  return m.role === "owner" ? "Tous les entrep\xF4ts" : "Mes entrep\xF4ts";
+}
+function libelleDefautUtilisateur(m) {
+  return defautDuPerimetre(m).auteurBorne ? "Moi uniquement" : "Tous les utilisateurs";
+}
+var LIBELLE_TOUS_ENTREPOTS = "Tous les entrep\xF4ts";
+var LIBELLE_TOUS_UTILISATEURS = "Tous les utilisateurs";
+function parametresDuChoix(choix) {
+  const p = {};
+  if (choix.entrepot === CHOIX_TOUS) p.all_warehouses = "1";
+  else if (choix.entrepot) p.warehouse = choix.entrepot;
+  if (choix.utilisateur === CHOIX_TOUS) p.all_users = "1";
+  else if (choix.utilisateur) p.user = choix.utilisateur;
+  return p;
+}
 function afficheFiltreEntrepot(m) {
-  return m.role !== null && litTousLesEntrepots(m);
+  if (m.role === null) return false;
+  if (litTousLesEntrepots(m)) return true;
+  if (m.role === "cashier" && !m.voitCollegues) return false;
+  return m.affectes.length >= 2;
 }
 function afficheFiltreUtilisateur(m) {
   return m.role !== null && !estBorneParAuteur(m, "lecture");
@@ -685,6 +737,7 @@ function verrouUtilisateur(m, nature = "lecture") {
 }
 function choixEntrepotRecevable(choix, permis, ouvertATous) {
   if (!choix) return null;
+  if (choix === CHOIX_TOUS) return ouvertATous ? CHOIX_TOUS : null;
   if (ouvertATous || permis.has(choix)) return choix;
   return null;
 }
@@ -1784,9 +1837,12 @@ function panierServable(lines2, options = {}) {
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  CHOIX_TOUS,
   DEFAULT_COUNTRY,
   LIBELLES_CASES_PERIMETRE,
   LIBELLES_VERROU_PERIMETRE,
+  LIBELLE_TOUS_ENTREPOTS,
+  LIBELLE_TOUS_UTILISATEURS,
   MAX_QUANTITY,
   MIN_QUANTITY,
   MONEY_EPS,
@@ -1805,12 +1861,15 @@ function panierServable(lines2, options = {}) {
   availableSplit,
   blendedUnitCost,
   canManageRole,
+  caseConsulterTousUtile,
+  caseVoirToutUtile,
   choixEntrepotRecevable,
   computeMargin,
   createCurrencyTable,
   createMoneyHelpers,
   daysLate,
   defaultCountryForCurrency,
+  defautDuPerimetre,
   dueDateLabel,
   entrepotsActionnables,
   entrepotsLisibles,
@@ -1844,13 +1903,18 @@ function panierServable(lines2, options = {}) {
   isAtLeastRole,
   isOverdue,
   isRole,
+  libelleDefautEntrepot,
+  libelleDefautUtilisateur,
   litTousLesEntrepots,
   membreDepuisPermissions,
   monthLong,
   monthShort,
   packageEquivalent,
+  parametresDuChoix,
   pluralizeUnit,
   pos,
+  proposeTousLesEntrepots,
+  proposeTousLesUtilisateurs,
   r2,
   receipt,
   remainingChannels,

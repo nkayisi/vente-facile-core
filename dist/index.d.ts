@@ -288,10 +288,26 @@ declare function canManageRole(userPermissions: UserPermissions | null, targetRo
  * │                                                                          │
  * │ Par défaut, un membre est ISOLÉ dans ses entrepôts affectés : il lit et  │
  * │ il agit là, et nulle part ailleurs. Le propriétaire peut, membre par     │
- * │ membre, cocher « Consulter tous les entrepôts » : ce membre LIT alors    │
- * │ tout, partout et quel qu'en soit l'auteur, mais il n'AGIT toujours que   │
- * │ dans ses entrepôts. C'est la règle du serveur                            │
+ * │ membre, cocher « Consulter tous les entrepôts » : ce membre PEUT alors   │
+ * │ lire tout, partout et quel qu'en soit l'auteur, mais il n'AGIT toujours  │
+ * │ que dans ses entrepôts. C'est la règle du serveur                        │
  * │ (`apps/core/warehouse_scope.py`), et ce module en est le miroir.         │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ CE QU'ON PEUT LIRE N'EST PAS CE QU'ON VOIT PAR DÉFAUT (2026-11-16).     │
+ * │                                                                          │
+ * │ - Le PROPRIÉTAIRE voit tout l'établissement.                             │
+ * │ - Le GÉRANT et le MAGASINIER voient toutes les données de leurs          │
+ * │   entrepôts.                                                             │
+ * │ - Le CAISSIER ne voit que SES données.                                   │
+ * │                                                                          │
+ * │ Les deux cases n'élargissent que sur FILTRE explicite : « Voir tout dans │
+ * │ son entrepôt » laisse le caissier choisir un collègue ou « Tous les      │
+ * │ utilisateurs » ; « Consulter tous les entrepôts » laisse choisir un      │
+ * │ autre entrepôt ou « Tous les entrepôts ». Sans filtre, l'écran reste au  │
+ * │ défaut : c'est `defautDuPerimetre`, et le serveur applique le même       │
+ * │ défaut à toute liste qui ne demande rien de plus.                        │
  * └──────────────────────────────────────────────────────────────────────────┘
  *
  * ┌──────────────────────────────────────────────────────────────────────────┐
@@ -387,15 +403,86 @@ declare const LIBELLES_CASES_PERIMETRE: {
     };
 };
 /**
+ * La case « Voir tout dans son entrepôt » a-t-elle un sens pour ce rôle ?
+ *
+ * Seulement pour un CAISSIER : le gérant et le magasinier voient déjà tout le
+ * travail de leurs entrepôts par leur rôle, et le propriétaire tout.
+ */
+declare function caseVoirToutUtile(role: Role | null | undefined): boolean;
+/**
+ * La case « Consulter tous les entrepôts » a-t-elle un sens pour ce rôle ?
+ * Pour tous, sauf le propriétaire, qui voit déjà tout l'établissement.
+ */
+declare function caseConsulterTousUtile(role: Role | null | undefined): boolean;
+/**
+ * Le choix qui ÉLARGIT au-delà du défaut : « Tous les entrepôts » ou « Tous
+ * les utilisateurs ». `null` est le défaut, un identifiant un choix précis.
+ *
+ * ⚠ Distinct de `null` parce que le défaut n'est pas toujours « tout » : pour
+ * un caissier, `null` veut dire « mes données », et « Tous les utilisateurs »
+ * est un geste qu'il fait exprès.
+ */
+declare const CHOIX_TOUS = "*";
+/** Ce qu'un membre voit SANS RIEN CHOISIR. */
+interface DefautPerimetre {
+    /**
+     * `null` : aucune borne au-delà de son périmètre. Sinon ses entrepôts : c'est
+     * le cas d'un membre qui PEUT lire tous les entrepôts (la case) mais ne le
+     * fait que sur filtre.
+     */
+    entrepots: string[] | null;
+    /** Vrai : par défaut, il ne voit que ses propres lignes. */
+    auteurBorne: boolean;
+}
+/**
+ * Le défaut d'un membre. Un rôle inconnu n'invente aucune borne : le serveur
+ * reste seul juge.
+ */
+declare function defautDuPerimetre(m: MembrePerimetre): DefautPerimetre;
+/**
+ * Le filtre peut-il proposer « Tous les entrepôts » comme choix EXPLICITE ?
+ * Pour la case « Consulter tous », dont le défaut reste ses entrepôts. Le
+ * propriétaire n'en a pas besoin : son défaut est déjà tout.
+ */
+declare function proposeTousLesEntrepots(m: MembrePerimetre): boolean;
+/**
+ * Le filtre peut-il proposer « Tous les utilisateurs » comme choix EXPLICITE ?
+ * Pour qui est borné à ses lignes par défaut mais a le droit de voir celles
+ * des autres : le caissier qui a l'une des deux cases.
+ */
+declare function proposeTousLesUtilisateurs(m: MembrePerimetre): boolean;
+/** Ce qu'on lit sur le champ quand rien n'est choisi : le défaut, nommé. */
+declare function libelleDefautEntrepot(m: MembrePerimetre): string;
+declare function libelleDefautUtilisateur(m: MembrePerimetre): string;
+/** Le libellé du choix explicite qui élargit. */
+declare const LIBELLE_TOUS_ENTREPOTS = "Tous les entrep\u00F4ts";
+declare const LIBELLE_TOUS_UTILISATEURS = "Tous les utilisateurs";
+/**
+ * Les paramètres de requête d'un choix, pour le serveur.
+ *
+ * `null` : rien n'est envoyé, le serveur applique le DÉFAUT. `CHOIX_TOUS` :
+ * `all_warehouses` / `all_users`. Un identifiant : `warehouse` / `user`.
+ */
+declare function parametresDuChoix(choix: {
+    entrepot: string | null;
+    utilisateur: string | null;
+}): {
+    warehouse?: string;
+    all_warehouses?: "1";
+    user?: string;
+    all_users?: "1";
+};
+/**
  * Le champ « Entrepôt » d'un filtre s'affiche-t-il ?
  *
  * ┌──────────────────────────────────────────────────────────────────────────┐
  * │ UN CHAMP QU'ON NE PEUT PAS CHANGER N'A PAS À ÊTRE MONTRÉ.               │
  * │                                                                          │
- * │ Seuls le propriétaire et un membre à qui l'on a coché « Consulter tous   │
- * │ les entrepôts » choisissent l'entrepôt qu'ils regardent. Pour tous les   │
- * │ autres, le champ n'apparaît pas : un champ fermé avec son motif occupait │
- * │ la feuille pour dire une chose que le membre n'a pas à décider.          │
+ * │ - le propriétaire et la case « Consulter tous les entrepôts » : oui ;   │
+ * │ - un membre de PLUSIEURS entrepôts : oui, limité aux siens ;            │
+ * │ - un caissier sans aucune case : jamais, il n'a rien à choisir ;        │
+ * │ - un membre d'un seul entrepôt : non, choisir entre une seule chose     │
+ * │   n'est pas un choix.                                                   │
  * └──────────────────────────────────────────────────────────────────────────┘
  *
  * ⚠ Masquer n'est pas lever : le périmètre continue de s'appliquer, au serveur
@@ -466,4 +553,4 @@ declare function daysLate(dueDate?: string | null): number;
 /** Libellé court : « En retard de 5 j », « Échoit dans 3 j », « Échoit aujourd'hui ». */
 declare function dueDateLabel(dueDate?: string | null): string | null;
 
-export { type CountryOption, type CurrencyOption, DEFAULT_COUNTRY, type EntrepotDuMembre, LIBELLES_CASES_PERIMETRE, LIBELLES_VERROU_PERIMETRE, type ManageableRole, type Margin, type MembrePerimetre, type MotifVerrouPerimetre, NNBSP, type NaturePerimetre, PERMISSION_VOIR_TOUT, ROLE_HIERARCHY, ROLE_LABELS, type Role, SUPPORTED_COUNTRIES, SUPPORTED_CURRENCIES, type UserPermissions, afficheFiltreEntrepot, afficheFiltreUtilisateur, afficheFiltresPerimetre, blendedUnitCost, canManageRole, choixEntrepotRecevable, computeMargin, daysLate, defaultCountryForCurrency, dueDateLabel, entrepotsActionnables, entrepotsLisibles, estBorneParAuteur, formatDate, formatDateFr, formatDateTime, formatDateTimeFr, formatDecimal, formatFixedFr, formatNumber, formatNumberFr, formatPercent, formatPrice, formatPriceValue, formatTimeFr, getCountryByValue, getCurrencyByCode, getCurrencyName, getCurrencySymbol, getDefaultCurrency, hasAllPermissions, hasAnyPermission, hasPermission, isAtLeastRole, isOverdue, isRole, litTousLesEntrepots, membreDepuisPermissions, monthLong, monthShort, packageEquivalent, pluralizeUnit, retailEquivalent, setDefaultCurrency, verrouEntrepot, verrouUtilisateur, weekdayLong };
+export { CHOIX_TOUS, type CountryOption, type CurrencyOption, DEFAULT_COUNTRY, type DefautPerimetre, type EntrepotDuMembre, LIBELLES_CASES_PERIMETRE, LIBELLES_VERROU_PERIMETRE, LIBELLE_TOUS_ENTREPOTS, LIBELLE_TOUS_UTILISATEURS, type ManageableRole, type Margin, type MembrePerimetre, type MotifVerrouPerimetre, NNBSP, type NaturePerimetre, PERMISSION_VOIR_TOUT, ROLE_HIERARCHY, ROLE_LABELS, type Role, SUPPORTED_COUNTRIES, SUPPORTED_CURRENCIES, type UserPermissions, afficheFiltreEntrepot, afficheFiltreUtilisateur, afficheFiltresPerimetre, blendedUnitCost, canManageRole, caseConsulterTousUtile, caseVoirToutUtile, choixEntrepotRecevable, computeMargin, daysLate, defaultCountryForCurrency, defautDuPerimetre, dueDateLabel, entrepotsActionnables, entrepotsLisibles, estBorneParAuteur, formatDate, formatDateFr, formatDateTime, formatDateTimeFr, formatDecimal, formatFixedFr, formatNumber, formatNumberFr, formatPercent, formatPrice, formatPriceValue, formatTimeFr, getCountryByValue, getCurrencyByCode, getCurrencyName, getCurrencySymbol, getDefaultCurrency, hasAllPermissions, hasAnyPermission, hasPermission, isAtLeastRole, isOverdue, isRole, libelleDefautEntrepot, libelleDefautUtilisateur, litTousLesEntrepots, membreDepuisPermissions, monthLong, monthShort, packageEquivalent, parametresDuChoix, pluralizeUnit, proposeTousLesEntrepots, proposeTousLesUtilisateurs, retailEquivalent, setDefaultCurrency, verrouEntrepot, verrouUtilisateur, weekdayLong };
