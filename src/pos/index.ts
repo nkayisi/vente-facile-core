@@ -10,3 +10,4 @@ export * from "./loyalty";
 export * from "./credit";
 export * from "./payload";
 export * from "./stock";
+export * from "./quantite-initiale";

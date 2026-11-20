@@ -780,6 +780,7 @@ __export(receipt_exports, {
   FONTS: () => FONTS,
   buildCashSessionReceipt: () => buildCashSessionReceipt,
   buildExpenseReceipt: () => buildExpenseReceipt,
+  buildExpenseRequest: () => buildExpenseRequest,
   buildPaymentReceipt: () => buildPaymentReceipt,
   buildSaleReceipt: () => buildSaleReceipt,
   compact: () => compact,
@@ -982,7 +983,15 @@ var DOCUMENT_IDENTITIES = {
     prefix: "CZ",
     numberLabel: "Ticket n\xB0"
   },
-  expense: { band: "RE\xC7U DE D\xC9PENSE", prefix: "DEP", numberLabel: "Re\xE7u n\xB0" }
+  expense: { band: "RE\xC7U DE D\xC9PENSE", prefix: "DEP", numberLabel: "Re\xE7u n\xB0" },
+  // Même numéro que le reçu qui suivra au paiement : c'est la même dépense,
+  // vue avant et après la sortie d'argent.
+  expense_request: {
+    band: "DEMANDE DE D\xC9PENSE",
+    sub: "Ne vaut pas justificatif de sortie de caisse",
+    prefix: "DEP",
+    numberLabel: "Demande n\xB0"
+  }
 };
 var DUPLICATE_CHIP = "DUPLICATA";
 
@@ -1379,7 +1388,9 @@ function buildExpenseReceipt(data) {
   const info = compact([
     data.category && { label: "Cat\xE9gorie", value: data.category },
     data.payee && { label: "B\xE9n\xE9ficiaire", value: data.payee },
-    data.paymentMethod && { label: "Mode", value: data.paymentMethod }
+    data.paymentMethod && { label: "Mode", value: data.paymentMethod },
+    data.paymentReference && { label: "R\xE9f. paiement", value: data.paymentReference },
+    data.approvedBy && { label: "Approuv\xE9e par", value: data.approvedBy }
   ]);
   return compact([
     ...orgHeaderBlocks(data.chrome),
@@ -1406,6 +1417,47 @@ function buildExpenseReceipt(data) {
     ])
   ]);
 }
+function buildExpenseRequest(data) {
+  const info = compact([
+    data.category && { label: "Cat\xE9gorie", value: data.category },
+    data.payee && { label: "B\xE9n\xE9ficiaire", value: data.payee }
+  ]);
+  return compact([
+    ...orgHeaderBlocks(data.chrome),
+    ...identityBlocks(data),
+    ...infoBlocks(data, info, "Demand\xE9e par"),
+    data.description && { kind: "space", size: "sm" },
+    data.description && {
+      kind: "text",
+      text: data.description,
+      role: "body",
+      align: "left"
+    },
+    { kind: "space", size: "sm" },
+    {
+      kind: "total",
+      label: "Montant demand\xE9",
+      value: formatMoney(data.amount, data.currency, data.currencyOverrides)
+    },
+    // Dans le CORPS et non dans les lignes de pied : celles-ci sont des
+    // lignes « par défaut », que `footerBlocks` remplace dès qu'on lui passe
+    // le pied du marchand. La mention ne doit dépendre d'aucun réglage.
+    { kind: "space", size: "sm" },
+    {
+      kind: "text",
+      text: "Aucun argent n'est encore sorti : il sortira au paiement, contre le re\xE7u de d\xE9pense.",
+      role: "label",
+      align: "left"
+    },
+    { kind: "space", size: "lg" },
+    { kind: "rule", weight: "hair" },
+    { kind: "text", text: "Demandeur", role: "legal", align: "left" },
+    { kind: "space", size: "lg" },
+    { kind: "rule", weight: "hair" },
+    { kind: "text", text: "Approbation", role: "legal", align: "left" },
+    ...footerBlocks({ org: data.chrome.org }, ["Pi\xE8ce \xE0 pr\xE9senter au paiement."])
+  ]);
+}
 
 // src/pos/index.ts
 var pos_exports = {};
@@ -1415,8 +1467,10 @@ __export(pos_exports, {
   addableChannels: () => addableChannels,
   addableLoose: () => addableLoose,
   addableSealed: () => addableSealed,
+  basculerCanal: () => basculerCanal,
   basketTotals: () => basketTotals,
   buildSalePayload: () => buildSalePayload,
+  canalParDefaut: () => canalParDefaut,
   createCurrencyTable: () => createCurrencyTable,
   evaluateCredit: () => evaluateCredit,
   inCart: () => inCart,
@@ -1428,12 +1482,15 @@ __export(pos_exports, {
   maxGlobalDiscount: () => maxGlobalDiscount,
   maxLoyaltyAmount: () => maxLoyaltyAmount,
   maxUsableCredit: () => maxUsableCredit,
+  monnaieARendre: () => monnaieARendre,
   motifDuVerrou: () => motifDuVerrou,
   motifStockInconnu: () => motifStockInconnu,
   motifsEncaissement: () => motifsEncaissement,
   packagingFactorOf: () => packagingFactorOf,
   panierServable: () => panierServable,
+  quantiteInitiale: () => quantiteInitiale,
   r2: () => r2,
+  saisieDeQuantite: () => saisieDeQuantite,
   saleCurrencyTotals: () => saleCurrencyTotals,
   tendersIn: () => tendersIn,
   totalInSaleCurrency: () => totalInSaleCurrency,
@@ -1588,6 +1645,22 @@ function tendersIn(tenders, currencies, target) {
     tenders.reduce((s, t) => s + currencies.convert(num(t.amount), t.currency, target), 0),
     target
   );
+}
+function monnaieARendre({
+  tenders,
+  total,
+  invoiceCurrency,
+  changeCurrency,
+  currencies
+}) {
+  if (tendersIn(tenders, currencies, invoiceCurrency) < total - MONEY_EPS) return 0;
+  const remis = tenders.reduce(
+    (s, t) => s + currencies.convert(num(t.amount), t.currency, changeCurrency),
+    0
+  );
+  const du = currencies.convert(total, invoiceCurrency, changeCurrency);
+  const monnaie = currencies.round(remis - du, changeCurrency);
+  return monnaie > 0 ? monnaie : 0;
 }
 
 // src/pos/loyalty.ts
@@ -1834,6 +1907,46 @@ function motifsEncaissement(lines2, options = {}) {
 }
 function panierServable(lines2, options = {}) {
   return lignesEnRupture(lines2, options).length === 0;
+}
+
+// src/pos/quantite-initiale.ts
+function canalParDefaut(packaging) {
+  return packaging?.packageOnly ? "package" : "retail";
+}
+function proposer(canal, alerteSiUn) {
+  const motif = alerteSiUn(canal);
+  if (motif) return { canal, packages: 0, loose: 0, proposee: false, motifVide: motif };
+  return {
+    canal,
+    packages: canal === "package" ? 1 : 0,
+    loose: canal === "retail" ? 1 : 0,
+    proposee: true,
+    motifVide: null
+  };
+}
+function quantiteInitiale({
+  packaging,
+  initiale,
+  alerteSiUn
+}) {
+  const packages = Math.max(0, initiale?.packages ?? 0);
+  const loose = Math.max(0, initiale?.loose ?? 0);
+  if (packages > 0 || loose > 0) {
+    const canal = packaging && (packaging.packageOnly || packages > 0 && loose === 0) ? "package" : "retail";
+    return { canal, packages, loose, proposee: false, motifVide: null };
+  }
+  return proposer(canalParDefaut(packaging), alerteSiUn);
+}
+function basculerCanal(etat, canal, alerteSiUn) {
+  if (canal === etat.canal) return etat;
+  if (etat.proposee || etat.motifVide !== null && etat.packages === 0 && etat.loose === 0) {
+    return proposer(canal, alerteSiUn);
+  }
+  return { ...etat, canal, motifVide: null };
+}
+function saisieDeQuantite(n) {
+  const q = roundQuantity(n);
+  return q >= MIN_QUANTITY ? String(q).replace(".", ",") : "";
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

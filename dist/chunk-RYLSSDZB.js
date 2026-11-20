@@ -13,6 +13,7 @@ __export(receipt_exports, {
   FONTS: () => FONTS,
   buildCashSessionReceipt: () => buildCashSessionReceipt,
   buildExpenseReceipt: () => buildExpenseReceipt,
+  buildExpenseRequest: () => buildExpenseRequest,
   buildPaymentReceipt: () => buildPaymentReceipt,
   buildSaleReceipt: () => buildSaleReceipt,
   compact: () => compact,
@@ -253,7 +254,15 @@ var DOCUMENT_IDENTITIES = {
     prefix: "CZ",
     numberLabel: "Ticket n\xB0"
   },
-  expense: { band: "RE\xC7U DE D\xC9PENSE", prefix: "DEP", numberLabel: "Re\xE7u n\xB0" }
+  expense: { band: "RE\xC7U DE D\xC9PENSE", prefix: "DEP", numberLabel: "Re\xE7u n\xB0" },
+  // Même numéro que le reçu qui suivra au paiement : c'est la même dépense,
+  // vue avant et après la sortie d'argent.
+  expense_request: {
+    band: "DEMANDE DE D\xC9PENSE",
+    sub: "Ne vaut pas justificatif de sortie de caisse",
+    prefix: "DEP",
+    numberLabel: "Demande n\xB0"
+  }
 };
 var DUPLICATE_CHIP = "DUPLICATA";
 
@@ -650,7 +659,9 @@ function buildExpenseReceipt(data) {
   const info = compact([
     data.category && { label: "Cat\xE9gorie", value: data.category },
     data.payee && { label: "B\xE9n\xE9ficiaire", value: data.payee },
-    data.paymentMethod && { label: "Mode", value: data.paymentMethod }
+    data.paymentMethod && { label: "Mode", value: data.paymentMethod },
+    data.paymentReference && { label: "R\xE9f. paiement", value: data.paymentReference },
+    data.approvedBy && { label: "Approuv\xE9e par", value: data.approvedBy }
   ]);
   return compact([
     ...orgHeaderBlocks(data.chrome),
@@ -675,6 +686,47 @@ function buildExpenseReceipt(data) {
     ...footerBlocks({ org: data.chrome.org }, [
       "Pi\xE8ce justificative de sortie de caisse."
     ])
+  ]);
+}
+function buildExpenseRequest(data) {
+  const info = compact([
+    data.category && { label: "Cat\xE9gorie", value: data.category },
+    data.payee && { label: "B\xE9n\xE9ficiaire", value: data.payee }
+  ]);
+  return compact([
+    ...orgHeaderBlocks(data.chrome),
+    ...identityBlocks(data),
+    ...infoBlocks(data, info, "Demand\xE9e par"),
+    data.description && { kind: "space", size: "sm" },
+    data.description && {
+      kind: "text",
+      text: data.description,
+      role: "body",
+      align: "left"
+    },
+    { kind: "space", size: "sm" },
+    {
+      kind: "total",
+      label: "Montant demand\xE9",
+      value: formatMoney(data.amount, data.currency, data.currencyOverrides)
+    },
+    // Dans le CORPS et non dans les lignes de pied : celles-ci sont des
+    // lignes « par défaut », que `footerBlocks` remplace dès qu'on lui passe
+    // le pied du marchand. La mention ne doit dépendre d'aucun réglage.
+    { kind: "space", size: "sm" },
+    {
+      kind: "text",
+      text: "Aucun argent n'est encore sorti : il sortira au paiement, contre le re\xE7u de d\xE9pense.",
+      role: "label",
+      align: "left"
+    },
+    { kind: "space", size: "lg" },
+    { kind: "rule", weight: "hair" },
+    { kind: "text", text: "Demandeur", role: "legal", align: "left" },
+    { kind: "space", size: "lg" },
+    { kind: "rule", weight: "hair" },
+    { kind: "text", text: "Approbation", role: "legal", align: "left" },
+    ...footerBlocks({ org: data.chrome.org }, ["Pi\xE8ce \xE0 pr\xE9senter au paiement."])
   ]);
 }
 
@@ -704,6 +756,7 @@ export {
   buildPaymentReceipt,
   buildCashSessionReceipt,
   buildExpenseReceipt,
+  buildExpenseRequest,
   receipt_exports
 };
-//# sourceMappingURL=chunk-6JKWBBNX.js.map
+//# sourceMappingURL=chunk-RYLSSDZB.js.map

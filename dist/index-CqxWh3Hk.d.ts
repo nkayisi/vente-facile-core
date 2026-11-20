@@ -297,7 +297,7 @@ declare function footerBlocks(chrome: ReceiptChrome, defaultLines: string[]): Bl
  * Chaque document porte désormais le même dispositif : un bandeau en vidéo
  * inversée sous l'en-tête, et un numéro préfixé par type.
  */
-type DocumentKind = "sale" | "credit_sale" | "proforma" | "debt_payment" | "advance" | "adjustment" | "sale_return" | "cash_session" | "expense";
+type DocumentKind = "sale" | "credit_sale" | "proforma" | "debt_payment" | "advance" | "adjustment" | "sale_return" | "cash_session" | "expense" | "expense_request";
 interface DocumentIdentity {
     /** Texte du bandeau inversé. */
     band: string;
@@ -519,17 +519,60 @@ interface CashSessionReceiptData extends BaseDocumentData {
     balances: CashSessionCurrencyLine[];
 }
 declare function buildCashSessionReceipt(data: CashSessionReceiptData): Block[];
+/**
+ * Reçu de dépense : la pièce justificative de l'argent SORTI.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ IL S'IMPRIME AU PAIEMENT, PLUS À LA CRÉATION.                           │
+ * │                                                                          │
+ * │ Une dépense naît en brouillon et ne sort de la caisse qu'au paiement.    │
+ * │ Le reçu imprimé à la création justifiait donc une sortie qui n'avait pas │
+ * │ eu lieu, et pouvait même ne jamais avoir lieu (dépense rejetée). Ce qui  │
+ * │ se remet à la création est la DEMANDE (`buildExpenseRequest`).           │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * `cashierName` est le PAYEUR, celui qui a fait sortir l'argent ; `date` est
+ * l'instant du paiement. `paidAt` doublonnerait `date` : il n'existe pas.
+ */
 interface ExpenseReceiptData extends BaseDocumentData {
     kind: "expense";
     chrome: ReceiptChrome;
     category?: string;
     payee?: string;
     paymentMethod?: string;
+    /** Référence du paiement (numéro de transaction, de chèque…). */
+    paymentReference?: string;
+    /** Qui a approuvé la dépense, s'il est connu. */
+    approvedBy?: string;
     amount: number;
     currency: string;
     description?: string;
 }
 declare function buildExpenseReceipt(data: ExpenseReceiptData): Block[];
+/**
+ * Demande de dépense : ce qui se remet à la CRÉATION.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ CE N'EST PAS UN JUSTIFICATIF, ET LE PAPIER LE DIT DEUX FOIS.            │
+ * │                                                                          │
+ * │ Sous le bandeau, et dans le corps. Aucun argent n'est sorti : la demande │
+ * │ attend une approbation, puis un paiement, qui seul imprime le reçu.      │
+ * │ Elle porte le MÊME numéro que ce reçu : c'est la même dépense, avant et  │
+ * │ après la sortie d'argent, et c'est ce numéro qu'on rapproche.           │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * `cashierName` est le DEMANDEUR ; `date` est l'instant de la demande.
+ */
+interface ExpenseRequestData extends BaseDocumentData {
+    kind: "expense_request";
+    chrome: ReceiptChrome;
+    category?: string;
+    payee?: string;
+    amount: number;
+    currency: string;
+    description?: string;
+}
+declare function buildExpenseRequest(data: ExpenseRequestData): Block[];
 
 /**
  * Fabrique de tickets, partie portable.
@@ -557,6 +600,7 @@ type index_DebtData = DebtData;
 type index_DocumentIdentity = DocumentIdentity;
 type index_DocumentKind = DocumentKind;
 type index_ExpenseReceiptData = ExpenseReceiptData;
+type index_ExpenseRequestData = ExpenseRequestData;
 declare const index_FONTS: typeof FONTS;
 type index_FontRole = FontRole;
 type index_FontSpec = FontSpec;
@@ -576,6 +620,7 @@ type index_SpaceSize = SpaceSize;
 type index_Tokens = Tokens;
 declare const index_buildCashSessionReceipt: typeof buildCashSessionReceipt;
 declare const index_buildExpenseReceipt: typeof buildExpenseReceipt;
+declare const index_buildExpenseRequest: typeof buildExpenseRequest;
 declare const index_buildPaymentReceipt: typeof buildPaymentReceipt;
 declare const index_buildSaleReceipt: typeof buildSaleReceipt;
 declare const index_compact: typeof compact;
@@ -593,7 +638,7 @@ declare const index_orgHeaderBlocks: typeof orgHeaderBlocks;
 declare const index_symbolOf: typeof symbolOf;
 declare const index_tokensFor: typeof tokensFor;
 declare namespace index {
-  export { type index_AmountRow as AmountRow, type index_BaseDocumentData as BaseDocumentData, type index_Block as Block, type index_CashSessionCurrencyLine as CashSessionCurrencyLine, type index_CashSessionReceiptData as CashSessionReceiptData, type index_CurrencyOverride as CurrencyOverride, type index_CurrencyOverrides as CurrencyOverrides, index_DOCUMENT_IDENTITIES as DOCUMENT_IDENTITIES, index_DUPLICATE_CHIP as DUPLICATE_CHIP, type index_DebtData as DebtData, type index_DocumentIdentity as DocumentIdentity, type index_DocumentKind as DocumentKind, type index_ExpenseReceiptData as ExpenseReceiptData, index_FONTS as FONTS, type index_FontRole as FontRole, type index_FontSpec as FontSpec, type index_ItemRow as ItemRow, type index_KvRow as KvRow, type index_LoadedLogo as LoadedLogo, type index_LoyaltyData as LoyaltyData, type index_OrgIdentity as OrgIdentity, type index_PaperWidth as PaperWidth, type index_PaymentReceiptData as PaymentReceiptData, type index_ReceiptChrome as ReceiptChrome, type index_RuleWeight as RuleWeight, type index_SaleReceiptData as SaleReceiptData, type index_SaleReceiptItem as SaleReceiptItem, type index_SaleReceiptPayment as SaleReceiptPayment, type index_SpaceSize as SpaceSize, type index_Tokens as Tokens, index_buildCashSessionReceipt as buildCashSessionReceipt, index_buildExpenseReceipt as buildExpenseReceipt, index_buildPaymentReceipt as buildPaymentReceipt, index_buildSaleReceipt as buildSaleReceipt, index_compact as compact, index_deaccent as deaccent, index_decimalsOf as decimalsOf, index_footerBlocks as footerBlocks, index_formatAmount as formatAmount, index_formatBare as formatBare, index_formatMoney as formatMoney, index_formatQuantity as formatQuantity, index_formatQuantityWithUnit as formatQuantityWithUnit, index_leading as leading, index_leadingOf as leadingOf, index_orgHeaderBlocks as orgHeaderBlocks, index_symbolOf as symbolOf, index_tokensFor as tokensFor };
+  export { type index_AmountRow as AmountRow, type index_BaseDocumentData as BaseDocumentData, type index_Block as Block, type index_CashSessionCurrencyLine as CashSessionCurrencyLine, type index_CashSessionReceiptData as CashSessionReceiptData, type index_CurrencyOverride as CurrencyOverride, type index_CurrencyOverrides as CurrencyOverrides, index_DOCUMENT_IDENTITIES as DOCUMENT_IDENTITIES, index_DUPLICATE_CHIP as DUPLICATE_CHIP, type index_DebtData as DebtData, type index_DocumentIdentity as DocumentIdentity, type index_DocumentKind as DocumentKind, type index_ExpenseReceiptData as ExpenseReceiptData, type index_ExpenseRequestData as ExpenseRequestData, index_FONTS as FONTS, type index_FontRole as FontRole, type index_FontSpec as FontSpec, type index_ItemRow as ItemRow, type index_KvRow as KvRow, type index_LoadedLogo as LoadedLogo, type index_LoyaltyData as LoyaltyData, type index_OrgIdentity as OrgIdentity, type index_PaperWidth as PaperWidth, type index_PaymentReceiptData as PaymentReceiptData, type index_ReceiptChrome as ReceiptChrome, type index_RuleWeight as RuleWeight, type index_SaleReceiptData as SaleReceiptData, type index_SaleReceiptItem as SaleReceiptItem, type index_SaleReceiptPayment as SaleReceiptPayment, type index_SpaceSize as SpaceSize, type index_Tokens as Tokens, index_buildCashSessionReceipt as buildCashSessionReceipt, index_buildExpenseReceipt as buildExpenseReceipt, index_buildExpenseRequest as buildExpenseRequest, index_buildPaymentReceipt as buildPaymentReceipt, index_buildSaleReceipt as buildSaleReceipt, index_compact as compact, index_deaccent as deaccent, index_decimalsOf as decimalsOf, index_footerBlocks as footerBlocks, index_formatAmount as formatAmount, index_formatBare as formatBare, index_formatMoney as formatMoney, index_formatQuantity as formatQuantity, index_formatQuantityWithUnit as formatQuantityWithUnit, index_leading as leading, index_leadingOf as leadingOf, index_orgHeaderBlocks as orgHeaderBlocks, index_symbolOf as symbolOf, index_tokensFor as tokensFor };
 }
 
-export { type AmountRow as A, type BaseDocumentData as B, type CashSessionCurrencyLine as C, DOCUMENT_IDENTITIES as D, type ExpenseReceiptData as E, FONTS as F, formatBare as G, formatMoney as H, type ItemRow as I, formatQuantity as J, type KvRow as K, type LoadedLogo as L, formatQuantityWithUnit as M, leading as N, type OrgIdentity as O, type PaperWidth as P, leadingOf as Q, type ReceiptChrome as R, type SaleReceiptData as S, type Tokens as T, orgHeaderBlocks as U, symbolOf as V, tokensFor as W, type Block as a, type CashSessionReceiptData as b, type CurrencyOverride as c, type CurrencyOverrides as d, DUPLICATE_CHIP as e, type DebtData as f, type DocumentIdentity as g, type DocumentKind as h, index as i, type FontRole as j, type FontSpec as k, type LoyaltyData as l, type PaymentReceiptData as m, type RuleWeight as n, type SaleReceiptItem as o, type SaleReceiptPayment as p, type SpaceSize as q, buildCashSessionReceipt as r, buildExpenseReceipt as s, buildPaymentReceipt as t, buildSaleReceipt as u, compact as v, deaccent as w, decimalsOf as x, footerBlocks as y, formatAmount as z };
+export { type AmountRow as A, type BaseDocumentData as B, type CashSessionCurrencyLine as C, DOCUMENT_IDENTITIES as D, type ExpenseReceiptData as E, FONTS as F, footerBlocks as G, formatAmount as H, type ItemRow as I, formatBare as J, type KvRow as K, type LoadedLogo as L, formatMoney as M, formatQuantity as N, type OrgIdentity as O, type PaperWidth as P, formatQuantityWithUnit as Q, type ReceiptChrome as R, type SaleReceiptData as S, type Tokens as T, leading as U, leadingOf as V, orgHeaderBlocks as W, symbolOf as X, tokensFor as Y, type Block as a, type CashSessionReceiptData as b, type CurrencyOverride as c, type CurrencyOverrides as d, DUPLICATE_CHIP as e, type DebtData as f, type DocumentIdentity as g, type DocumentKind as h, index as i, type ExpenseRequestData as j, type FontRole as k, type FontSpec as l, type LoyaltyData as m, type PaymentReceiptData as n, type RuleWeight as o, type SaleReceiptItem as p, type SaleReceiptPayment as q, type SpaceSize as r, buildCashSessionReceipt as s, buildExpenseReceipt as t, buildExpenseRequest as u, buildPaymentReceipt as v, buildSaleReceipt as w, compact as x, deaccent as y, decimalsOf as z };

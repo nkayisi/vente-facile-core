@@ -483,6 +483,39 @@ interface TenderLike {
 }
 /** Somme des règlements, convertie et arrondie dans la devise demandée. */
 declare function tendersIn(tenders: TenderLike[], currencies: CurrencyTable, target: string): number;
+interface MonnaieInput {
+    tenders: TenderLike[];
+    /** Total de la facture, dans `invoiceCurrency`. */
+    total: number;
+    invoiceCurrency: string;
+    /** Devise des billets que le caissier rend. */
+    changeCurrency: string;
+    currencies: CurrencyTable;
+}
+/**
+ * La monnaie à rendre, dans la devise des billets rendus.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ UN SEUL ARRONDI, À LA FIN, DANS LA DEVISE DE LA MONNAIE.                │
+ * │                                                                          │
+ * │ L'ancien calcul convertissait les billets remis vers la devise de la     │
+ * │ facture, ARRONDISSAIT au centime, prenait le surplus, puis le            │
+ * │ reconvertissait. Une vente de 575 $ réglée 1 700 000 FC (1 $ = 2 300 FC) │
+ * │ y perdait un franc : 739,13 $ remis, 164,13 $ de surplus, 377 499 FC     │
+ * │ rendus, quand le client attend 1 700 000 - 1 322 500 = 377 500. Un       │
+ * │ centime de dollar vaut 23 francs : jusqu'à onze francs par règlement     │
+ * │ étranger, gardés par le tiroir et comptés en excédent au Z.              │
+ * │                                                                          │
+ * │ On convertit donc chaque billet remis ET le total directement vers la    │
+ * │ devise de la monnaie, sans arrondi intermédiaire.                        │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * La facture doit être couverte, mesurée comme le serveur décide du statut
+ * (somme arrondie dans la devise de facture) : en deçà il n'y a rien à rendre,
+ * il reste à payer. Le serveur rejoue la même règle dans `resolve_change`
+ * (`apps/sales/services.py`) ; leurs tests portent les MÊMES cas.
+ */
+declare function monnaieARendre({ tenders, total, invoiceCurrency, changeCurrency, currencies, }: MonnaieInput): number;
 
 interface LoyaltyProgramLike {
     is_active?: boolean | null;
@@ -797,6 +830,82 @@ declare function motifsEncaissement(lines: LigneStockee[], options?: OptionsEnca
 declare function panierServable(lines: LigneStockee[], options?: OptionsEncaissement): boolean;
 
 /**
+ * Ce que le sélecteur de quantité affiche à son ouverture.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ ON PROPOSE 1, ET LA PREMIÈRE TOUCHE LE REMPLACE.                        │
+ * │                                                                          │
+ * │ Le sélecteur s'ouvrait vide : le caissier tapait « 1 » sur presque       │
+ * │ chaque article, et un scan ne se validait pas d'Entrée. La crainte qui   │
+ * │ justifiait le champ vide - un 1 validé par inadvertance - ne vaut que si │
+ * │ ce 1 fait du tort : il ne fait du tort que quand il fermerait            │
+ * │ l'encaissement. Dans ce cas-là, et dans lui seul, le champ reste vide et │
+ * │ le motif s'affiche dès l'ouverture, avant la moindre frappe.             │
+ * │                                                                          │
+ * │ La valeur proposée est sélectionnée : taper « 3 » donne 3, jamais 13.    │
+ * │ Le web le doit à `select()`, le terminal à son drapeau de remplacement.  │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * Les deux surfaces passent ici, pour ne pas proposer deux choses différentes
+ * du même article. Chacune fournit SON contrôle de stock (`alerteSiUn`) : le
+ * web lit le disponible du dépôt, le terminal y retranche ses ventes en file.
+ */
+
+type CanalQuantite = "retail" | "package";
+interface EtatQuantite {
+    canal: CanalQuantite;
+    packages: number;
+    loose: number;
+    /**
+     * La quantité vient de nous, pas du caissier. Tant qu'elle n'a pas été
+     * touchée, elle suit le canal (voir `basculerCanal`).
+     */
+    proposee: boolean;
+    /**
+     * Pourquoi rien n'est proposé : le motif que la surface opposerait à 1.
+     * `null` dès qu'une quantité est affichée.
+     */
+    motifVide: string | null;
+}
+interface QuantiteInitialeInput {
+    /** `getPackaging(article)`, `null` pour un article vendu à l'unité seule. */
+    packaging: Pick<Packaging, "packageOnly"> | null;
+    /** La ligne déjà au panier, en modification. */
+    initiale?: {
+        packages: number;
+        loose: number;
+    } | null;
+    /**
+     * Le motif que la surface opposerait à une saisie de 1 dans ce canal, ou
+     * `null`. N'y entrent que les motifs qui FERMERAIENT l'encaissement : stock
+     * insuffisant ou inconnu, scellés manquants, verrou d'inventaire. L'avis
+     * d'ouverture automatique d'un contenant n'en est pas un : il informe.
+     */
+    alerteSiUn: (canal: CanalQuantite) => string | null;
+}
+/** Canal ouvert par défaut : le contenant pour un article vendu en gros seul. */
+declare function canalParDefaut(packaging: Pick<Packaging, "packageOnly"> | null): CanalQuantite;
+declare function quantiteInitiale({ packaging, initiale, alerteSiUn, }: QuantiteInitialeInput): EtatQuantite;
+/**
+ * Change de canal.
+ *
+ * ⚠ UNE PROPOSITION INTACTE SUIT LE CANAL. Sans cela, le caissier qui ouvre un
+ * article proposé à « 1 bouteille » et passe aux cartons pour en taper deux
+ * vendrait « 2 cartons + 1 bouteille » : la bouteille qu'il n'a jamais demandée
+ * resterait dans l'autre canal. Dès que le caissier a touché la quantité, elle
+ * est à lui, et les deux canaux gardent ce qu'il y a mis.
+ */
+declare function basculerCanal(etat: EtatQuantite, canal: CanalQuantite, alerteSiUn: QuantiteInitialeInput["alerteSiUn"]): EtatQuantite;
+/**
+ * Texte d'un champ de quantité : « 1 », « 0,5 », vide pour zéro.
+ *
+ * ⚠ Virgule, et SANS séparateur de milliers : c'est la valeur d'un champ de
+ * saisie, pas un affichage. `String(0.5)` donnait « 0.5 », qu'une virgule
+ * tapée ensuite rendait illisible (« 0.5, »).
+ */
+declare function saisieDeQuantite(n: number): string;
+
+/**
  * Arithmétique du point de vente, partagée par le back-office et le mobile.
  *
  * Tout ce qui décide d'un montant vit ici. Les deux surfaces peuvent différer
@@ -807,16 +916,20 @@ type index_BasketInput = BasketInput;
 type index_BasketLine = BasketLine;
 type index_BasketProduct = BasketProduct;
 type index_BasketTotals = BasketTotals;
+type index_CanalQuantite = CanalQuantite;
 type index_CauseRefusEncaissement = CauseRefusEncaissement;
 type index_CreditCustomerLike = CreditCustomerLike;
 type index_CreditVerdict = CreditVerdict;
 type index_CurrencyFallback = CurrencyFallback;
 type index_CurrencyTable = CurrencyTable;
+type index_EtatQuantite = EtatQuantite;
 type index_LigneStockee = LigneStockee;
 type index_LoyaltyProgramLike = LoyaltyProgramLike;
 declare const index_MONEY_EPS: typeof MONEY_EPS;
+type index_MonnaieInput = MonnaieInput;
 type index_OptionsEncaissement = OptionsEncaissement;
 type index_OrganizationCurrencyLike = OrganizationCurrencyLike;
+type index_QuantiteInitialeInput = QuantiteInitialeInput;
 type index_Rupture = Rupture;
 type index_Saisie = Saisie;
 type index_SaleCurrencyInput = SaleCurrencyInput;
@@ -835,8 +948,10 @@ declare const index_addableBase: typeof addableBase;
 declare const index_addableChannels: typeof addableChannels;
 declare const index_addableLoose: typeof addableLoose;
 declare const index_addableSealed: typeof addableSealed;
+declare const index_basculerCanal: typeof basculerCanal;
 declare const index_basketTotals: typeof basketTotals;
 declare const index_buildSalePayload: typeof buildSalePayload;
+declare const index_canalParDefaut: typeof canalParDefaut;
 declare const index_createCurrencyTable: typeof createCurrencyTable;
 declare const index_evaluateCredit: typeof evaluateCredit;
 declare const index_inCart: typeof inCart;
@@ -848,19 +963,22 @@ declare const index_loyaltyEarned: typeof loyaltyEarned;
 declare const index_maxGlobalDiscount: typeof maxGlobalDiscount;
 declare const index_maxLoyaltyAmount: typeof maxLoyaltyAmount;
 declare const index_maxUsableCredit: typeof maxUsableCredit;
+declare const index_monnaieARendre: typeof monnaieARendre;
 declare const index_motifDuVerrou: typeof motifDuVerrou;
 declare const index_motifStockInconnu: typeof motifStockInconnu;
 declare const index_motifsEncaissement: typeof motifsEncaissement;
 declare const index_packagingFactorOf: typeof packagingFactorOf;
 declare const index_panierServable: typeof panierServable;
+declare const index_quantiteInitiale: typeof quantiteInitiale;
 declare const index_r2: typeof r2;
+declare const index_saisieDeQuantite: typeof saisieDeQuantite;
 declare const index_saleCurrencyTotals: typeof saleCurrencyTotals;
 declare const index_tendersIn: typeof tendersIn;
 declare const index_totalInSaleCurrency: typeof totalInSaleCurrency;
 declare const index_totauxParDevise: typeof totauxParDevise;
 declare const index_verifierAjout: typeof verifierAjout;
 declare namespace index {
-  export { type index_BasketInput as BasketInput, type index_BasketLine as BasketLine, type index_BasketProduct as BasketProduct, type index_BasketTotals as BasketTotals, type index_CauseRefusEncaissement as CauseRefusEncaissement, type index_CreditCustomerLike as CreditCustomerLike, type index_CreditVerdict as CreditVerdict, type index_CurrencyFallback as CurrencyFallback, type index_CurrencyTable as CurrencyTable, type index_LigneStockee as LigneStockee, type index_LoyaltyProgramLike as LoyaltyProgramLike, index_MONEY_EPS as MONEY_EPS, type index_OptionsEncaissement as OptionsEncaissement, type index_OrganizationCurrencyLike as OrganizationCurrencyLike, type index_Rupture as Rupture, type index_Saisie as Saisie, type index_SaleCurrencyInput as SaleCurrencyInput, type index_SaleCurrencyLine as SaleCurrencyLine, type index_SaleCurrencyTotals as SaleCurrencyTotals, type index_SaleItemPayload as SaleItemPayload, type index_SalePayload as SalePayload, type index_SalePayloadInput as SalePayloadInput, type index_SalePaymentPayload as SalePaymentPayload, type index_SaleTender as SaleTender, type index_StockedProductLike as StockedProductLike, type index_TenderLike as TenderLike, type index_TotalParDevise as TotalParDevise, type index_VerdictAjout as VerdictAjout, index_addableBase as addableBase, index_addableChannels as addableChannels, index_addableLoose as addableLoose, index_addableSealed as addableSealed, index_basketTotals as basketTotals, index_buildSalePayload as buildSalePayload, index_createCurrencyTable as createCurrencyTable, index_evaluateCredit as evaluateCredit, index_inCart as inCart, index_lignesEnRupture as lignesEnRupture, index_lineGross as lineGross, index_looseQuantityOf as looseQuantityOf, index_loyaltyDiscount as loyaltyDiscount, index_loyaltyEarned as loyaltyEarned, index_maxGlobalDiscount as maxGlobalDiscount, index_maxLoyaltyAmount as maxLoyaltyAmount, index_maxUsableCredit as maxUsableCredit, index_motifDuVerrou as motifDuVerrou, index_motifStockInconnu as motifStockInconnu, index_motifsEncaissement as motifsEncaissement, index_packagingFactorOf as packagingFactorOf, index_panierServable as panierServable, index_r2 as r2, index_saleCurrencyTotals as saleCurrencyTotals, index_tendersIn as tendersIn, index_totalInSaleCurrency as totalInSaleCurrency, index_totauxParDevise as totauxParDevise, index_verifierAjout as verifierAjout };
+  export { type index_BasketInput as BasketInput, type index_BasketLine as BasketLine, type index_BasketProduct as BasketProduct, type index_BasketTotals as BasketTotals, type index_CanalQuantite as CanalQuantite, type index_CauseRefusEncaissement as CauseRefusEncaissement, type index_CreditCustomerLike as CreditCustomerLike, type index_CreditVerdict as CreditVerdict, type index_CurrencyFallback as CurrencyFallback, type index_CurrencyTable as CurrencyTable, type index_EtatQuantite as EtatQuantite, type index_LigneStockee as LigneStockee, type index_LoyaltyProgramLike as LoyaltyProgramLike, index_MONEY_EPS as MONEY_EPS, type index_MonnaieInput as MonnaieInput, type index_OptionsEncaissement as OptionsEncaissement, type index_OrganizationCurrencyLike as OrganizationCurrencyLike, type index_QuantiteInitialeInput as QuantiteInitialeInput, type index_Rupture as Rupture, type index_Saisie as Saisie, type index_SaleCurrencyInput as SaleCurrencyInput, type index_SaleCurrencyLine as SaleCurrencyLine, type index_SaleCurrencyTotals as SaleCurrencyTotals, type index_SaleItemPayload as SaleItemPayload, type index_SalePayload as SalePayload, type index_SalePayloadInput as SalePayloadInput, type index_SalePaymentPayload as SalePaymentPayload, type index_SaleTender as SaleTender, type index_StockedProductLike as StockedProductLike, type index_TenderLike as TenderLike, type index_TotalParDevise as TotalParDevise, type index_VerdictAjout as VerdictAjout, index_addableBase as addableBase, index_addableChannels as addableChannels, index_addableLoose as addableLoose, index_addableSealed as addableSealed, index_basculerCanal as basculerCanal, index_basketTotals as basketTotals, index_buildSalePayload as buildSalePayload, index_canalParDefaut as canalParDefaut, index_createCurrencyTable as createCurrencyTable, index_evaluateCredit as evaluateCredit, index_inCart as inCart, index_lignesEnRupture as lignesEnRupture, index_lineGross as lineGross, index_looseQuantityOf as looseQuantityOf, index_loyaltyDiscount as loyaltyDiscount, index_loyaltyEarned as loyaltyEarned, index_maxGlobalDiscount as maxGlobalDiscount, index_maxLoyaltyAmount as maxLoyaltyAmount, index_maxUsableCredit as maxUsableCredit, index_monnaieARendre as monnaieARendre, index_motifDuVerrou as motifDuVerrou, index_motifStockInconnu as motifStockInconnu, index_motifsEncaissement as motifsEncaissement, index_packagingFactorOf as packagingFactorOf, index_panierServable as panierServable, index_quantiteInitiale as quantiteInitiale, index_r2 as r2, index_saisieDeQuantite as saisieDeQuantite, index_saleCurrencyTotals as saleCurrencyTotals, index_tendersIn as tendersIn, index_totalInSaleCurrency as totalInSaleCurrency, index_totauxParDevise as totauxParDevise, index_verifierAjout as verifierAjout };
 }
 
-export { type TotalParDevise as $, type BasketProduct as A, type BasketInput as B, type ChannelAvailability as C, type BasketTotals as D, type CauseRefusEncaissement as E, type CreditCustomerLike as F, type CreditVerdict as G, type LoyaltyProgramLike as H, type OptionsEncaissement as I, type Saisie as J, type SaleCurrencyInput as K, type LigneStockee as L, MAX_QUANTITY as M, type SaleCurrencyLine as N, type OrganizationCurrency as O, type PackagedProductLike as P, QUANTITY_DECIMALS as Q, type Rupture as R, type StockCounters as S, type SaleCurrencyTotals as T, type SaleItemPayload as U, type SalePayload as V, type SalePayloadInput as W, type SalePaymentPayload as X, type SaleTender as Y, type StockedProductLike as Z, type TenderLike as _, type CurrencyFallback as a, type VerdictAjout as a0, addableBase as a1, addableChannels as a2, addableLoose as a3, addableSealed as a4, basketTotals as a5, buildSalePayload as a6, evaluateCredit as a7, inCart as a8, lignesEnRupture as a9, lineGross as aa, looseQuantityOf as ab, loyaltyDiscount as ac, loyaltyEarned as ad, maxGlobalDiscount as ae, maxLoyaltyAmount as af, maxUsableCredit as ag, motifDuVerrou as ah, motifStockInconnu as ai, motifsEncaissement as aj, packagingFactorOf as ak, panierServable as al, saleCurrencyTotals as am, tendersIn as an, totalInSaleCurrency as ao, totauxParDevise as ap, verifierAjout as aq, type CurrencyInfo as b, type CurrencyTable as c, MIN_QUANTITY as d, MONEY_EPS as e, type MoneyHelpers as f, type OrganizationCurrencyLike as g, type Packaging as h, QUANTITY_INTEGER_DIGITS as i, availableBase as j, availableSplit as k, createCurrencyTable as l, createMoneyHelpers as m, formatPackaged as n, formatPackagedDifference as o, formatPackagedSplit as p, formatQuantity as q, formatUnitQuantity as r, getPackaging as s, index as t, r2 as u, remainingChannels as v, roundQuantity as w, splitPackaged as x, toBaseQuantity as y, type BasketLine as z };
+export { type SalePaymentPayload as $, type BasketProduct as A, type BasketInput as B, type ChannelAvailability as C, type BasketTotals as D, type CanalQuantite as E, type CauseRefusEncaissement as F, type CreditCustomerLike as G, type CreditVerdict as H, type EtatQuantite as I, type LoyaltyProgramLike as J, type MonnaieInput as K, type LigneStockee as L, MAX_QUANTITY as M, type OptionsEncaissement as N, type OrganizationCurrency as O, type PackagedProductLike as P, QUANTITY_DECIMALS as Q, type QuantiteInitialeInput as R, type StockCounters as S, type Rupture as T, type Saisie as U, type SaleCurrencyInput as V, type SaleCurrencyLine as W, type SaleCurrencyTotals as X, type SaleItemPayload as Y, type SalePayload as Z, type SalePayloadInput as _, type CurrencyFallback as a, type SaleTender as a0, type StockedProductLike as a1, type TenderLike as a2, type TotalParDevise as a3, type VerdictAjout as a4, addableBase as a5, addableChannels as a6, addableLoose as a7, addableSealed as a8, basculerCanal as a9, basketTotals as aa, buildSalePayload as ab, canalParDefaut as ac, evaluateCredit as ad, inCart as ae, lignesEnRupture as af, lineGross as ag, looseQuantityOf as ah, loyaltyDiscount as ai, loyaltyEarned as aj, maxGlobalDiscount as ak, maxLoyaltyAmount as al, maxUsableCredit as am, monnaieARendre as an, motifDuVerrou as ao, motifStockInconnu as ap, motifsEncaissement as aq, packagingFactorOf as ar, panierServable as as, quantiteInitiale as at, saisieDeQuantite as au, saleCurrencyTotals as av, tendersIn as aw, totalInSaleCurrency as ax, totauxParDevise as ay, verifierAjout as az, type CurrencyInfo as b, type CurrencyTable as c, MIN_QUANTITY as d, MONEY_EPS as e, type MoneyHelpers as f, type OrganizationCurrencyLike as g, type Packaging as h, QUANTITY_INTEGER_DIGITS as i, availableBase as j, availableSplit as k, createCurrencyTable as l, createMoneyHelpers as m, formatPackaged as n, formatPackagedDifference as o, formatPackagedSplit as p, formatQuantity as q, formatUnitQuantity as r, getPackaging as s, index as t, r2 as u, remainingChannels as v, roundQuantity as w, splitPackaged as x, toBaseQuantity as y, type BasketLine as z };

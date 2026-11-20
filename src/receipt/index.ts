@@ -62,7 +62,9 @@ export {
 export {
   buildCashSessionReceipt,
   buildExpenseReceipt,
+  buildExpenseRequest,
   type CashSessionReceiptData,
   type CashSessionCurrencyLine,
   type ExpenseReceiptData,
+  type ExpenseRequestData,
 } from "./documents/cash-session";

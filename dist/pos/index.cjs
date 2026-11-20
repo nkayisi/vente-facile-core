@@ -25,8 +25,10 @@ __export(pos_exports, {
   addableChannels: () => addableChannels,
   addableLoose: () => addableLoose,
   addableSealed: () => addableSealed,
+  basculerCanal: () => basculerCanal,
   basketTotals: () => basketTotals,
   buildSalePayload: () => buildSalePayload,
+  canalParDefaut: () => canalParDefaut,
   createCurrencyTable: () => createCurrencyTable,
   evaluateCredit: () => evaluateCredit,
   inCart: () => inCart,
@@ -38,12 +40,15 @@ __export(pos_exports, {
   maxGlobalDiscount: () => maxGlobalDiscount,
   maxLoyaltyAmount: () => maxLoyaltyAmount,
   maxUsableCredit: () => maxUsableCredit,
+  monnaieARendre: () => monnaieARendre,
   motifDuVerrou: () => motifDuVerrou,
   motifStockInconnu: () => motifStockInconnu,
   motifsEncaissement: () => motifsEncaissement,
   packagingFactorOf: () => packagingFactorOf,
   panierServable: () => panierServable,
+  quantiteInitiale: () => quantiteInitiale,
   r2: () => r2,
+  saisieDeQuantite: () => saisieDeQuantite,
   saleCurrencyTotals: () => saleCurrencyTotals,
   tendersIn: () => tendersIn,
   totalInSaleCurrency: () => totalInSaleCurrency,
@@ -301,6 +306,22 @@ function tendersIn(tenders, currencies, target) {
     target
   );
 }
+function monnaieARendre({
+  tenders,
+  total,
+  invoiceCurrency,
+  changeCurrency,
+  currencies
+}) {
+  if (tendersIn(tenders, currencies, invoiceCurrency) < total - MONEY_EPS) return 0;
+  const remis = tenders.reduce(
+    (s, t) => s + currencies.convert(num(t.amount), t.currency, changeCurrency),
+    0
+  );
+  const du = currencies.convert(total, invoiceCurrency, changeCurrency);
+  const monnaie = currencies.round(remis - du, changeCurrency);
+  return monnaie > 0 ? monnaie : 0;
+}
 
 // src/pos/loyalty.ts
 function maxLoyaltyAmount(grossTotal, program) {
@@ -556,6 +577,46 @@ function motifsEncaissement(lines, options = {}) {
 function panierServable(lines, options = {}) {
   return lignesEnRupture(lines, options).length === 0;
 }
+
+// src/pos/quantite-initiale.ts
+function canalParDefaut(packaging) {
+  return packaging?.packageOnly ? "package" : "retail";
+}
+function proposer(canal, alerteSiUn) {
+  const motif = alerteSiUn(canal);
+  if (motif) return { canal, packages: 0, loose: 0, proposee: false, motifVide: motif };
+  return {
+    canal,
+    packages: canal === "package" ? 1 : 0,
+    loose: canal === "retail" ? 1 : 0,
+    proposee: true,
+    motifVide: null
+  };
+}
+function quantiteInitiale({
+  packaging,
+  initiale,
+  alerteSiUn
+}) {
+  const packages = Math.max(0, initiale?.packages ?? 0);
+  const loose = Math.max(0, initiale?.loose ?? 0);
+  if (packages > 0 || loose > 0) {
+    const canal = packaging && (packaging.packageOnly || packages > 0 && loose === 0) ? "package" : "retail";
+    return { canal, packages, loose, proposee: false, motifVide: null };
+  }
+  return proposer(canalParDefaut(packaging), alerteSiUn);
+}
+function basculerCanal(etat, canal, alerteSiUn) {
+  if (canal === etat.canal) return etat;
+  if (etat.proposee || etat.motifVide !== null && etat.packages === 0 && etat.loose === 0) {
+    return proposer(canal, alerteSiUn);
+  }
+  return { ...etat, canal, motifVide: null };
+}
+function saisieDeQuantite(n) {
+  const q = roundQuantity(n);
+  return q >= MIN_QUANTITY ? String(q).replace(".", ",") : "";
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   MONEY_EPS,
@@ -563,8 +624,10 @@ function panierServable(lines, options = {}) {
   addableChannels,
   addableLoose,
   addableSealed,
+  basculerCanal,
   basketTotals,
   buildSalePayload,
+  canalParDefaut,
   createCurrencyTable,
   evaluateCredit,
   inCart,
@@ -576,12 +639,15 @@ function panierServable(lines, options = {}) {
   maxGlobalDiscount,
   maxLoyaltyAmount,
   maxUsableCredit,
+  monnaieARendre,
   motifDuVerrou,
   motifStockInconnu,
   motifsEncaissement,
   packagingFactorOf,
   panierServable,
+  quantiteInitiale,
   r2,
+  saisieDeQuantite,
   saleCurrencyTotals,
   tendersIn,
   totalInSaleCurrency,

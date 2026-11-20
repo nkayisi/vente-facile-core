@@ -4,6 +4,7 @@ import {
   FONTS,
   buildCashSessionReceipt,
   buildExpenseReceipt,
+  buildExpenseRequest,
   buildPaymentReceipt,
   buildSaleReceipt,
   compact,
@@ -20,7 +21,7 @@ import {
   orgHeaderBlocks,
   symbolOf,
   tokensFor
-} from "../chunk-6JKWBBNX.js";
+} from "../chunk-RYLSSDZB.js";
 import "../chunk-B5W4KJNN.js";
 import "../chunk-PZ5AY32C.js";
 export {
@@ -29,6 +30,7 @@ export {
   FONTS,
   buildCashSessionReceipt,
   buildExpenseReceipt,
+  buildExpenseRequest,
   buildPaymentReceipt,
   buildSaleReceipt,
   compact,

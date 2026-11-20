@@ -20,7 +20,8 @@ export type DocumentKind =
   | "adjustment"
   | "sale_return"
   | "cash_session"
-  | "expense";
+  | "expense"
+  | "expense_request";
 
 export interface DocumentIdentity {
   /** Texte du bandeau inversé. */
@@ -65,6 +66,14 @@ export const DOCUMENT_IDENTITIES: Record<DocumentKind, DocumentIdentity> = {
     numberLabel: "Ticket n°",
   },
   expense: { band: "REÇU DE DÉPENSE", prefix: "DEP", numberLabel: "Reçu n°" },
+  // Même numéro que le reçu qui suivra au paiement : c'est la même dépense,
+  // vue avant et après la sortie d'argent.
+  expense_request: {
+    band: "DEMANDE DE DÉPENSE",
+    sub: "Ne vaut pas justificatif de sortie de caisse",
+    prefix: "DEP",
+    numberLabel: "Demande n°",
+  },
 };
 
 /** Mention portée par toute réimpression, pour la distinguer de l'original. */

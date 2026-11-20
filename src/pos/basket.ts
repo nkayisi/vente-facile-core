@@ -18,7 +18,7 @@
  *   donnerait un autre chiffre, et c'est celui-là que le client paie.
  */
 import { getPackaging, roundQuantity, type PackagedProductLike } from "../packaging";
-import { r2, type CurrencyTable } from "./money";
+import { MONEY_EPS, r2, type CurrencyTable } from "./money";
 
 export interface BasketProduct extends PackagedProductLike {
   /**
@@ -374,4 +374,54 @@ export function tendersIn(
     tenders.reduce((s, t) => s + currencies.convert(num(t.amount), t.currency, target), 0),
     target
   );
+}
+
+export interface MonnaieInput {
+  tenders: TenderLike[];
+  /** Total de la facture, dans `invoiceCurrency`. */
+  total: number;
+  invoiceCurrency: string;
+  /** Devise des billets que le caissier rend. */
+  changeCurrency: string;
+  currencies: CurrencyTable;
+}
+
+/**
+ * La monnaie à rendre, dans la devise des billets rendus.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ UN SEUL ARRONDI, À LA FIN, DANS LA DEVISE DE LA MONNAIE.                │
+ * │                                                                          │
+ * │ L'ancien calcul convertissait les billets remis vers la devise de la     │
+ * │ facture, ARRONDISSAIT au centime, prenait le surplus, puis le            │
+ * │ reconvertissait. Une vente de 575 $ réglée 1 700 000 FC (1 $ = 2 300 FC) │
+ * │ y perdait un franc : 739,13 $ remis, 164,13 $ de surplus, 377 499 FC     │
+ * │ rendus, quand le client attend 1 700 000 - 1 322 500 = 377 500. Un       │
+ * │ centime de dollar vaut 23 francs : jusqu'à onze francs par règlement     │
+ * │ étranger, gardés par le tiroir et comptés en excédent au Z.              │
+ * │                                                                          │
+ * │ On convertit donc chaque billet remis ET le total directement vers la    │
+ * │ devise de la monnaie, sans arrondi intermédiaire.                        │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * La facture doit être couverte, mesurée comme le serveur décide du statut
+ * (somme arrondie dans la devise de facture) : en deçà il n'y a rien à rendre,
+ * il reste à payer. Le serveur rejoue la même règle dans `resolve_change`
+ * (`apps/sales/services.py`) ; leurs tests portent les MÊMES cas.
+ */
+export function monnaieARendre({
+  tenders,
+  total,
+  invoiceCurrency,
+  changeCurrency,
+  currencies,
+}: MonnaieInput): number {
+  if (tendersIn(tenders, currencies, invoiceCurrency) < total - MONEY_EPS) return 0;
+  const remis = tenders.reduce(
+    (s, t) => s + currencies.convert(num(t.amount), t.currency, changeCurrency),
+    0
+  );
+  const du = currencies.convert(total, invoiceCurrency, changeCurrency);
+  const monnaie = currencies.round(remis - du, changeCurrency);
+  return monnaie > 0 ? monnaie : 0;
 }
