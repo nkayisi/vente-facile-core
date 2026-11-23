@@ -11,3 +11,4 @@ export * from "./credit";
 export * from "./payload";
 export * from "./stock";
 export * from "./quantite-initiale";
+export * from "./douchette";

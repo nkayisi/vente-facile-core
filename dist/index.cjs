@@ -1462,6 +1462,10 @@ function buildExpenseRequest(data) {
 // src/pos/index.ts
 var pos_exports = {};
 __export(pos_exports, {
+  DOUCHETTE_AU_REPOS: () => DOUCHETTE_AU_REPOS,
+  ECART_ENTREE_MAX_MS: () => ECART_ENTREE_MAX_MS,
+  ECART_MAX_MS: () => ECART_MAX_MS,
+  LONGUEUR_MIN: () => LONGUEUR_MIN,
   MONEY_EPS: () => MONEY_EPS,
   addableBase: () => addableBase,
   addableChannels: () => addableChannels,
@@ -1471,8 +1475,12 @@ __export(pos_exports, {
   basketTotals: () => basketTotals,
   buildSalePayload: () => buildSalePayload,
   canalParDefaut: () => canalParDefaut,
+  candidatsDuScan: () => candidatsDuScan,
   createCurrencyTable: () => createCurrencyTable,
+  estLeMemeArticle: () => estLeMemeArticle,
   evaluateCredit: () => evaluateCredit,
+  frapper: () => frapper,
+  frapperDansLaSaisie: () => frapperDansLaSaisie,
   inCart: () => inCart,
   lignesEnRupture: () => lignesEnRupture,
   lineGross: () => lineGross,
@@ -1488,8 +1496,10 @@ __export(pos_exports, {
   motifsEncaissement: () => motifsEncaissement,
   packagingFactorOf: () => packagingFactorOf,
   panierServable: () => panierServable,
+  quantiteApresRescan: () => quantiteApresRescan,
   quantiteInitiale: () => quantiteInitiale,
   r2: () => r2,
+  rescanAuRepos: () => rescanAuRepos,
   saisieDeQuantite: () => saisieDeQuantite,
   saleCurrencyTotals: () => saleCurrencyTotals,
   tendersIn: () => tendersIn,
@@ -1947,6 +1957,56 @@ function basculerCanal(etat, canal, alerteSiUn) {
 function saisieDeQuantite(n) {
   const q = roundQuantity(n);
   return q >= MIN_QUANTITY ? String(q).replace(".", ",") : "";
+}
+
+// src/pos/douchette.ts
+var ECART_MAX_MS = 40;
+var ECART_ENTREE_MAX_MS = 120;
+var LONGUEUR_MIN = 4;
+var DOUCHETTE_AU_REPOS = { tampon: "", dernier: null };
+function frapper(etat, touche, instant) {
+  const ecart = etat.dernier == null ? Infinity : instant - etat.dernier;
+  if (touche === "Enter") {
+    const code = etat.tampon.length >= LONGUEUR_MIN && ecart <= ECART_ENTREE_MAX_MS ? etat.tampon : null;
+    return { etat: DOUCHETTE_AU_REPOS, code };
+  }
+  if (touche.length !== 1) return { etat, code: null };
+  const tampon = ecart <= ECART_MAX_MS ? etat.tampon + touche : touche;
+  return { etat: { tampon, dernier: instant }, code: null };
+}
+function candidatsDuScan(code, valeurDuChamp) {
+  const complet = (valeurDuChamp ?? "").trim();
+  if (complet && complet !== code && complet.endsWith(code)) return [code, complet];
+  return [code];
+}
+function rescanAuRepos() {
+  return { douchette: DOUCHETTE_AU_REPOS, avant: null, brut: "", dernier: null };
+}
+function frapperDansLaSaisie(etat, touche, instant, courant) {
+  const r = frapper(etat.douchette, touche, instant);
+  if (touche === "Enter") {
+    const scan = r.code && etat.avant !== null ? { candidats: candidatsDuScan(r.code, etat.brut), avant: etat.avant } : null;
+    return { etat: rescanAuRepos(), scan };
+  }
+  if (touche.length !== 1) return { etat: { ...etat, douchette: r.etat }, scan: null };
+  const pause = etat.dernier == null || instant - etat.dernier > ECART_ENTREE_MAX_MS;
+  return {
+    etat: {
+      douchette: r.etat,
+      avant: pause ? courant : etat.avant,
+      brut: (pause ? "" : etat.brut) + touche,
+      dernier: instant
+    },
+    scan: null
+  };
+}
+function estLeMemeArticle(candidats, article) {
+  const codes = [article.barcode, article.sku].map((c) => (c ?? "").trim().toLowerCase()).filter(Boolean);
+  return candidats.some((c) => codes.includes(c.trim().toLowerCase()));
+}
+function quantiteApresRescan(valeur) {
+  const base = Number.isFinite(valeur) && valeur > 0 ? valeur : 0;
+  return roundQuantity(base + 1);
 }
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {

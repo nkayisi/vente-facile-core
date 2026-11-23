@@ -906,6 +906,122 @@ declare function basculerCanal(etat: EtatQuantite, canal: CanalQuantite, alerteS
 declare function saisieDeQuantite(n: number): string;
 
 /**
+ * ─── Reconnaître une douchette (lecteur de codes-barres) dans le flux du clavier.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ UNE DOUCHETTE EST UN CLAVIER QUI TAPE TRÈS VITE, PUIS ENTRÉE.            │
+ * │                                                                          │
+ * │ Branchée en USB ou en Bluetooth, elle « tape » le code lu caractère par  │
+ * │ caractère, à quelques millisecondes d'intervalle, et finit par Entrée.   │
+ * │ Personne ne tape quatre caractères à moins de quarante millisecondes     │
+ * │ l'un de l'autre : c'est ce qui sépare un scan d'une frappe, sans rien    │
+ * │ demander au vendeur ni lui imposer de cliquer dans un champ.             │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * Module PUR : l'instant de chaque touche est INJECTÉ, pour que la règle
+ * s'éprouve sans navigateur ni horloge.
+ */
+/** L'écart maximal entre deux caractères d'un même scan. */
+declare const ECART_MAX_MS = 40;
+/** Le délai toléré entre le dernier caractère et Entrée. */
+declare const ECART_ENTREE_MAX_MS = 120;
+/** En deçà, c'est trop court pour un code-barres. */
+declare const LONGUEUR_MIN = 4;
+interface EtatDouchette {
+    /** Les caractères de la rafale en cours, tous tapés à moins d'`ECART_MAX_MS`. */
+    tampon: string;
+    /** L'instant de la dernière touche, `null` avant la première. */
+    dernier: number | null;
+}
+declare const DOUCHETTE_AU_REPOS: EtatDouchette;
+/**
+ * Une touche de plus. Rend le nouvel état, et le code lu quand la rafale se
+ * termine par Entrée.
+ *
+ * `touche` est `KeyboardEvent.key` : un caractère imprimable fait une seule
+ * lettre, Entrée s'écrit « Enter ». Toute autre touche (Maj, flèches) est
+ * ignorée sans rompre la rafale : une douchette en azerty envoie Maj pour
+ * chaque chiffre.
+ */
+declare function frapper(etat: EtatDouchette, touche: string, instant: number): {
+    etat: EtatDouchette;
+    code: string | null;
+};
+/**
+ * Les codes à essayer, dans l'ordre, pour un scan tapé dans la recherche.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ UN SCAN TRONQUÉ EN TÊTE NE DOIT PAS PROPOSER UN MAUVAIS ARTICLE.         │
+ * │                                                                          │
+ * │ Si le tout premier caractère arrive un peu tard (lecteur Bluetooth,      │
+ * │ poste chargé), la rafale repart du deuxième : « 87687GJHGD » se lit     │
+ * │ « 7687GJHGD ». Introuvable, il proposerait de CRÉER un article sous un   │
+ * │ code faux. Tapé dans la recherche, le champ porte pourtant le code      │
+ * │ entier : il devient le second candidat, essayé si le premier ne trouve  │
+ * │ rien. Hors de la recherche il n'y a pas de champ, donc rien à rattraper. │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+declare function candidatsDuScan(code: string, valeurDuChamp: string | null): string[];
+/**
+ * ─── Un scan de douchette pendant que la saisie de quantité est ouverte.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ LE CODE-BARRES S'ÉCRIVAIT DANS LE CHAMP QUANTITÉ, PUIS ENTRÉE VALIDAIT.  │
+ * │                                                                          │
+ * │ La douchette « tape » : re-scanner l'article pendant que sa quantité est │
+ * │ ouverte écrivait 600123456789 dans le champ, et l'Entrée de la rafale    │
+ * │ ajoutait cette quantité au panier. Le scan est désormais reconnu dans le │
+ * │ champ même : la saisie est rétablie telle qu'avant la rafale, le même    │
+ * │ article ajoute 1 (scanner deux fois donne 2), un autre est refusé.       │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * Les caractères de la rafale atteignent le champ avant qu'on sache que c'est
+ * un scan : on mémorise donc l'état de la saisie avant la rafale, et on le
+ * rend au code lu. « Avant la rafale », c'est la dernière touche venue après
+ * une pause plus longue que ce qu'une douchette tolère entre son dernier
+ * caractère et Entrée : un premier caractère lu en retard (scan tronqué en
+ * tête) ne déplace donc pas ce point de reprise.
+ *
+ * Module PUR : l'instant de chaque touche est injecté.
+ */
+interface EtatRescan<T> {
+    douchette: EtatDouchette;
+    /** L'état de la saisie avant la rafale en cours, `null` au repos. */
+    avant: T | null;
+    /** Tout ce qui a été tapé depuis `avant`, pour un scan tronqué en tête. */
+    brut: string;
+    dernier: number | null;
+}
+declare function rescanAuRepos<T>(): EtatRescan<T>;
+interface ScanDansLaSaisie<T> {
+    /** Les codes à essayer, dans l'ordre (`candidatsDuScan`). */
+    candidats: string[];
+    /** La saisie à rétablir : celle d'avant la rafale. */
+    avant: T;
+}
+/**
+ * Une touche dans le champ quantité. `courant` est l'état de la saisie AVANT
+ * cette touche (un `keydown` précède la frappe).
+ */
+declare function frapperDansLaSaisie<T>(etat: EtatRescan<T>, touche: string, instant: number, courant: T): {
+    etat: EtatRescan<T>;
+    scan: ScanDansLaSaisie<T> | null;
+};
+/** Le code lu désigne-t-il cet article (code-barres ou SKU, casse ignorée) ? */
+declare function estLeMemeArticle(candidats: string[], article: {
+    barcode?: string | null;
+    sku?: string | null;
+}): boolean;
+/**
+ * La quantité d'un canal après un re-scan du MÊME article : un de plus.
+ *
+ * Scanner deux fois donne 2 : c'est le geste du caissier qui compte ses
+ * articles en les passant sous le lecteur. Une saisie vide ou illisible
+ * repart de zéro, jamais d'un nombre inventé.
+ */
+declare function quantiteApresRescan(valeur: number): number;
+
+/**
  * Arithmétique du point de vente, partagée par le back-office et le mobile.
  *
  * Tout ce qui décide d'un montant vit ici. Les deux surfaces peuvent différer
@@ -922,7 +1038,13 @@ type index_CreditCustomerLike = CreditCustomerLike;
 type index_CreditVerdict = CreditVerdict;
 type index_CurrencyFallback = CurrencyFallback;
 type index_CurrencyTable = CurrencyTable;
+declare const index_DOUCHETTE_AU_REPOS: typeof DOUCHETTE_AU_REPOS;
+declare const index_ECART_ENTREE_MAX_MS: typeof ECART_ENTREE_MAX_MS;
+declare const index_ECART_MAX_MS: typeof ECART_MAX_MS;
+type index_EtatDouchette = EtatDouchette;
 type index_EtatQuantite = EtatQuantite;
+type index_EtatRescan<T> = EtatRescan<T>;
+declare const index_LONGUEUR_MIN: typeof LONGUEUR_MIN;
 type index_LigneStockee = LigneStockee;
 type index_LoyaltyProgramLike = LoyaltyProgramLike;
 declare const index_MONEY_EPS: typeof MONEY_EPS;
@@ -940,6 +1062,7 @@ type index_SalePayload = SalePayload;
 type index_SalePayloadInput = SalePayloadInput;
 type index_SalePaymentPayload = SalePaymentPayload;
 type index_SaleTender = SaleTender;
+type index_ScanDansLaSaisie<T> = ScanDansLaSaisie<T>;
 type index_StockedProductLike = StockedProductLike;
 type index_TenderLike = TenderLike;
 type index_TotalParDevise = TotalParDevise;
@@ -952,8 +1075,12 @@ declare const index_basculerCanal: typeof basculerCanal;
 declare const index_basketTotals: typeof basketTotals;
 declare const index_buildSalePayload: typeof buildSalePayload;
 declare const index_canalParDefaut: typeof canalParDefaut;
+declare const index_candidatsDuScan: typeof candidatsDuScan;
 declare const index_createCurrencyTable: typeof createCurrencyTable;
+declare const index_estLeMemeArticle: typeof estLeMemeArticle;
 declare const index_evaluateCredit: typeof evaluateCredit;
+declare const index_frapper: typeof frapper;
+declare const index_frapperDansLaSaisie: typeof frapperDansLaSaisie;
 declare const index_inCart: typeof inCart;
 declare const index_lignesEnRupture: typeof lignesEnRupture;
 declare const index_lineGross: typeof lineGross;
@@ -969,8 +1096,10 @@ declare const index_motifStockInconnu: typeof motifStockInconnu;
 declare const index_motifsEncaissement: typeof motifsEncaissement;
 declare const index_packagingFactorOf: typeof packagingFactorOf;
 declare const index_panierServable: typeof panierServable;
+declare const index_quantiteApresRescan: typeof quantiteApresRescan;
 declare const index_quantiteInitiale: typeof quantiteInitiale;
 declare const index_r2: typeof r2;
+declare const index_rescanAuRepos: typeof rescanAuRepos;
 declare const index_saisieDeQuantite: typeof saisieDeQuantite;
 declare const index_saleCurrencyTotals: typeof saleCurrencyTotals;
 declare const index_tendersIn: typeof tendersIn;
@@ -978,7 +1107,7 @@ declare const index_totalInSaleCurrency: typeof totalInSaleCurrency;
 declare const index_totauxParDevise: typeof totauxParDevise;
 declare const index_verifierAjout: typeof verifierAjout;
 declare namespace index {
-  export { type index_BasketInput as BasketInput, type index_BasketLine as BasketLine, type index_BasketProduct as BasketProduct, type index_BasketTotals as BasketTotals, type index_CanalQuantite as CanalQuantite, type index_CauseRefusEncaissement as CauseRefusEncaissement, type index_CreditCustomerLike as CreditCustomerLike, type index_CreditVerdict as CreditVerdict, type index_CurrencyFallback as CurrencyFallback, type index_CurrencyTable as CurrencyTable, type index_EtatQuantite as EtatQuantite, type index_LigneStockee as LigneStockee, type index_LoyaltyProgramLike as LoyaltyProgramLike, index_MONEY_EPS as MONEY_EPS, type index_MonnaieInput as MonnaieInput, type index_OptionsEncaissement as OptionsEncaissement, type index_OrganizationCurrencyLike as OrganizationCurrencyLike, type index_QuantiteInitialeInput as QuantiteInitialeInput, type index_Rupture as Rupture, type index_Saisie as Saisie, type index_SaleCurrencyInput as SaleCurrencyInput, type index_SaleCurrencyLine as SaleCurrencyLine, type index_SaleCurrencyTotals as SaleCurrencyTotals, type index_SaleItemPayload as SaleItemPayload, type index_SalePayload as SalePayload, type index_SalePayloadInput as SalePayloadInput, type index_SalePaymentPayload as SalePaymentPayload, type index_SaleTender as SaleTender, type index_StockedProductLike as StockedProductLike, type index_TenderLike as TenderLike, type index_TotalParDevise as TotalParDevise, type index_VerdictAjout as VerdictAjout, index_addableBase as addableBase, index_addableChannels as addableChannels, index_addableLoose as addableLoose, index_addableSealed as addableSealed, index_basculerCanal as basculerCanal, index_basketTotals as basketTotals, index_buildSalePayload as buildSalePayload, index_canalParDefaut as canalParDefaut, index_createCurrencyTable as createCurrencyTable, index_evaluateCredit as evaluateCredit, index_inCart as inCart, index_lignesEnRupture as lignesEnRupture, index_lineGross as lineGross, index_looseQuantityOf as looseQuantityOf, index_loyaltyDiscount as loyaltyDiscount, index_loyaltyEarned as loyaltyEarned, index_maxGlobalDiscount as maxGlobalDiscount, index_maxLoyaltyAmount as maxLoyaltyAmount, index_maxUsableCredit as maxUsableCredit, index_monnaieARendre as monnaieARendre, index_motifDuVerrou as motifDuVerrou, index_motifStockInconnu as motifStockInconnu, index_motifsEncaissement as motifsEncaissement, index_packagingFactorOf as packagingFactorOf, index_panierServable as panierServable, index_quantiteInitiale as quantiteInitiale, index_r2 as r2, index_saisieDeQuantite as saisieDeQuantite, index_saleCurrencyTotals as saleCurrencyTotals, index_tendersIn as tendersIn, index_totalInSaleCurrency as totalInSaleCurrency, index_totauxParDevise as totauxParDevise, index_verifierAjout as verifierAjout };
+  export { type index_BasketInput as BasketInput, type index_BasketLine as BasketLine, type index_BasketProduct as BasketProduct, type index_BasketTotals as BasketTotals, type index_CanalQuantite as CanalQuantite, type index_CauseRefusEncaissement as CauseRefusEncaissement, type index_CreditCustomerLike as CreditCustomerLike, type index_CreditVerdict as CreditVerdict, type index_CurrencyFallback as CurrencyFallback, type index_CurrencyTable as CurrencyTable, index_DOUCHETTE_AU_REPOS as DOUCHETTE_AU_REPOS, index_ECART_ENTREE_MAX_MS as ECART_ENTREE_MAX_MS, index_ECART_MAX_MS as ECART_MAX_MS, type index_EtatDouchette as EtatDouchette, type index_EtatQuantite as EtatQuantite, type index_EtatRescan as EtatRescan, index_LONGUEUR_MIN as LONGUEUR_MIN, type index_LigneStockee as LigneStockee, type index_LoyaltyProgramLike as LoyaltyProgramLike, index_MONEY_EPS as MONEY_EPS, type index_MonnaieInput as MonnaieInput, type index_OptionsEncaissement as OptionsEncaissement, type index_OrganizationCurrencyLike as OrganizationCurrencyLike, type index_QuantiteInitialeInput as QuantiteInitialeInput, type index_Rupture as Rupture, type index_Saisie as Saisie, type index_SaleCurrencyInput as SaleCurrencyInput, type index_SaleCurrencyLine as SaleCurrencyLine, type index_SaleCurrencyTotals as SaleCurrencyTotals, type index_SaleItemPayload as SaleItemPayload, type index_SalePayload as SalePayload, type index_SalePayloadInput as SalePayloadInput, type index_SalePaymentPayload as SalePaymentPayload, type index_SaleTender as SaleTender, type index_ScanDansLaSaisie as ScanDansLaSaisie, type index_StockedProductLike as StockedProductLike, type index_TenderLike as TenderLike, type index_TotalParDevise as TotalParDevise, type index_VerdictAjout as VerdictAjout, index_addableBase as addableBase, index_addableChannels as addableChannels, index_addableLoose as addableLoose, index_addableSealed as addableSealed, index_basculerCanal as basculerCanal, index_basketTotals as basketTotals, index_buildSalePayload as buildSalePayload, index_canalParDefaut as canalParDefaut, index_candidatsDuScan as candidatsDuScan, index_createCurrencyTable as createCurrencyTable, index_estLeMemeArticle as estLeMemeArticle, index_evaluateCredit as evaluateCredit, index_frapper as frapper, index_frapperDansLaSaisie as frapperDansLaSaisie, index_inCart as inCart, index_lignesEnRupture as lignesEnRupture, index_lineGross as lineGross, index_looseQuantityOf as looseQuantityOf, index_loyaltyDiscount as loyaltyDiscount, index_loyaltyEarned as loyaltyEarned, index_maxGlobalDiscount as maxGlobalDiscount, index_maxLoyaltyAmount as maxLoyaltyAmount, index_maxUsableCredit as maxUsableCredit, index_monnaieARendre as monnaieARendre, index_motifDuVerrou as motifDuVerrou, index_motifStockInconnu as motifStockInconnu, index_motifsEncaissement as motifsEncaissement, index_packagingFactorOf as packagingFactorOf, index_panierServable as panierServable, index_quantiteApresRescan as quantiteApresRescan, index_quantiteInitiale as quantiteInitiale, index_r2 as r2, index_rescanAuRepos as rescanAuRepos, index_saisieDeQuantite as saisieDeQuantite, index_saleCurrencyTotals as saleCurrencyTotals, index_tendersIn as tendersIn, index_totalInSaleCurrency as totalInSaleCurrency, index_totauxParDevise as totauxParDevise, index_verifierAjout as verifierAjout };
 }
 
-export { type SalePaymentPayload as $, type BasketProduct as A, type BasketInput as B, type ChannelAvailability as C, type BasketTotals as D, type CanalQuantite as E, type CauseRefusEncaissement as F, type CreditCustomerLike as G, type CreditVerdict as H, type EtatQuantite as I, type LoyaltyProgramLike as J, type MonnaieInput as K, type LigneStockee as L, MAX_QUANTITY as M, type OptionsEncaissement as N, type OrganizationCurrency as O, type PackagedProductLike as P, QUANTITY_DECIMALS as Q, type QuantiteInitialeInput as R, type StockCounters as S, type Rupture as T, type Saisie as U, type SaleCurrencyInput as V, type SaleCurrencyLine as W, type SaleCurrencyTotals as X, type SaleItemPayload as Y, type SalePayload as Z, type SalePayloadInput as _, type CurrencyFallback as a, type SaleTender as a0, type StockedProductLike as a1, type TenderLike as a2, type TotalParDevise as a3, type VerdictAjout as a4, addableBase as a5, addableChannels as a6, addableLoose as a7, addableSealed as a8, basculerCanal as a9, basketTotals as aa, buildSalePayload as ab, canalParDefaut as ac, evaluateCredit as ad, inCart as ae, lignesEnRupture as af, lineGross as ag, looseQuantityOf as ah, loyaltyDiscount as ai, loyaltyEarned as aj, maxGlobalDiscount as ak, maxLoyaltyAmount as al, maxUsableCredit as am, monnaieARendre as an, motifDuVerrou as ao, motifStockInconnu as ap, motifsEncaissement as aq, packagingFactorOf as ar, panierServable as as, quantiteInitiale as at, saisieDeQuantite as au, saleCurrencyTotals as av, tendersIn as aw, totalInSaleCurrency as ax, totauxParDevise as ay, verifierAjout as az, type CurrencyInfo as b, type CurrencyTable as c, MIN_QUANTITY as d, MONEY_EPS as e, type MoneyHelpers as f, type OrganizationCurrencyLike as g, type Packaging as h, QUANTITY_INTEGER_DIGITS as i, availableBase as j, availableSplit as k, createCurrencyTable as l, createMoneyHelpers as m, formatPackaged as n, formatPackagedDifference as o, formatPackagedSplit as p, formatQuantity as q, formatUnitQuantity as r, getPackaging as s, index as t, r2 as u, remainingChannels as v, roundQuantity as w, splitPackaged as x, toBaseQuantity as y, type BasketLine as z };
+export { type SaleCurrencyInput as $, type BasketProduct as A, type BasketInput as B, type ChannelAvailability as C, type BasketTotals as D, type CanalQuantite as E, type CauseRefusEncaissement as F, type CreditCustomerLike as G, type CreditVerdict as H, DOUCHETTE_AU_REPOS as I, ECART_ENTREE_MAX_MS as J, ECART_MAX_MS as K, type EtatDouchette as L, MAX_QUANTITY as M, type EtatQuantite as N, type OrganizationCurrency as O, type PackagedProductLike as P, QUANTITY_DECIMALS as Q, type EtatRescan as R, type StockCounters as S, LONGUEUR_MIN as T, type LigneStockee as U, type LoyaltyProgramLike as V, type MonnaieInput as W, type OptionsEncaissement as X, type QuantiteInitialeInput as Y, type Rupture as Z, type Saisie as _, type CurrencyFallback as a, type SaleCurrencyLine as a0, type SaleCurrencyTotals as a1, type SaleItemPayload as a2, type SalePayload as a3, type SalePayloadInput as a4, type SalePaymentPayload as a5, type SaleTender as a6, type ScanDansLaSaisie as a7, type StockedProductLike as a8, type TenderLike as a9, motifStockInconnu as aA, motifsEncaissement as aB, packagingFactorOf as aC, panierServable as aD, quantiteApresRescan as aE, quantiteInitiale as aF, rescanAuRepos as aG, saisieDeQuantite as aH, saleCurrencyTotals as aI, tendersIn as aJ, totalInSaleCurrency as aK, totauxParDevise as aL, verifierAjout as aM, type TotalParDevise as aa, type VerdictAjout as ab, addableBase as ac, addableChannels as ad, addableLoose as ae, addableSealed as af, basculerCanal as ag, basketTotals as ah, buildSalePayload as ai, canalParDefaut as aj, candidatsDuScan as ak, estLeMemeArticle as al, evaluateCredit as am, frapper as an, frapperDansLaSaisie as ao, inCart as ap, lignesEnRupture as aq, lineGross as ar, looseQuantityOf as as, loyaltyDiscount as at, loyaltyEarned as au, maxGlobalDiscount as av, maxLoyaltyAmount as aw, maxUsableCredit as ax, monnaieARendre as ay, motifDuVerrou as az, type CurrencyInfo as b, type CurrencyTable as c, MIN_QUANTITY as d, MONEY_EPS as e, type MoneyHelpers as f, type OrganizationCurrencyLike as g, type Packaging as h, QUANTITY_INTEGER_DIGITS as i, availableBase as j, availableSplit as k, createCurrencyTable as l, createMoneyHelpers as m, formatPackaged as n, formatPackagedDifference as o, formatPackagedSplit as p, formatQuantity as q, formatUnitQuantity as r, getPackaging as s, index as t, r2 as u, remainingChannels as v, roundQuantity as w, splitPackaged as x, toBaseQuantity as y, type BasketLine as z };
