@@ -1022,12 +1022,385 @@ declare function estLeMemeArticle(candidats: string[], article: {
 declare function quantiteApresRescan(valeur: number): number;
 
 /**
+ * Afficher un prix de catalogue dans une AUTRE devise, au taux en vigueur.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ T10 DU RETOUR DE TEST : « convertir les produits selon le taux ».       │
+ * │                                                                          │
+ * │ Un marchand dont le catalogue est tenu en dollars doit pouvoir annoncer  │
+ * │ un prix en francs à son client, sans calculer de tête. C'est tout ce que │
+ * │ cette demande couvre.                                                    │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * ⚠ C'EST UN AFFICHAGE, PAS UNE DEVISE PAR PRODUIT, et la distinction est
+ * structurelle. Vérifié : le catalogue n'a AUCUNE colonne de devise, et toute
+ * l'arithmétique de marge repose sur la convention « le coût est déjà en devise
+ * principale », précisément parce qu'il n'est jamais converti. Ajouter une
+ * devise par produit serait un changement de schéma qui toucherait la marge,
+ * les vingt et un agrégats de rapports, les exports et les documents imprimés -
+ * c'est-à-dire des chiffres déjà sortis sur du papier remis à des clients.
+ *
+ * ⚠ RIEN N'EST ADDITIONNÉ ICI. La règle du dépôt - « aucun écran n'additionne
+ * deux monnaies » - tient : on convertit UN prix pour le montrer, le panier
+ * continue de totaliser en principale, et la facture reste libellée en
+ * principale. Le ticket n'est pas touché.
+ */
+
+interface PrixAvecEquivalent {
+    /** Le prix tel qu'il sera FACTURÉ, en devise principale. Toujours là. */
+    facture: string;
+    /**
+     * Le même prix dans l'AUTRE devise de l'établissement, au taux en vigueur.
+     * `null` sur un établissement mono-devise.
+     *
+     * ⚠ IL NE REMPLACE JAMAIS `facture`, il le suit entre parenthèses. Un prix
+     * converti affiché seul se lit comme le prix de vente, et le ticket
+     * sortirait alors dans une autre monnaie que celle annoncée au client.
+     */
+    equivalent: string | null;
+}
+/**
+ * Les devises qu'on peut proposer à l'affichage.
+ *
+ * La principale EN TÊTE : c'est la devise de facturation, donc le défaut, et
+ * l'ordre dit lequel des deux chiffres est le prix.
+ */
+declare function devisesAffichables(money: MoneyHelpers): string[];
+/**
+ * La devise dans laquelle la carte donne l'équivalent d'un prix.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ L'ÉQUIVALENT EST TOUJOURS LÀ, ET IL N'Y A PLUS RIEN À CHOISIR.           │
+ * │                                                                          │
+ * │ La rangée « Afficher en » du comptoir faisait choisir une devise         │
+ * │ d'affichage, rangée par appareil : le caissier devait savoir qu'elle     │
+ * │ existait, et un terminal réglé hier sur la principale n'annonçait plus  │
+ * │ rien en francs. L'équivalent suit désormais le prix sur chaque carte.   │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * La première autre devise ACTIVE, dans l'ordre de `devisesAffichables`. Une
+ * devise désactivée n'est pas proposée : le marchand l'a retirée de sa caisse,
+ * et l'annoncer au client serait lui promettre un règlement qu'on refusera.
+ */
+declare function deviseEquivalente(money: MoneyHelpers): string | null;
+/**
+ * Le prix facturé et son équivalent dans l'autre devise.
+ *
+ * ⚠ UNE DEVISE INCONNUE NE CONVERTIT RIEN. `rateOf` rend 1 pour une devise
+ * qu'elle ne connaît pas : convertir quand même afficherait le même nombre
+ * sous un autre symbole, c'est-à-dire un prix faux présenté comme exact.
+ */
+declare function prixAvecEquivalent(prix: number, money: MoneyHelpers): PrixAvecEquivalent;
+
+/**
+ * Ce que la carte d'un article dit de son stock, PUR.
+ *
+ * Miroir de la carte du point de vente du back-office : un bandeau posé sur la
+ * vignette, vert quand il y en a, ambre sous le seuil, rouge quand il n'y en a
+ * plus. Le caissier repère ce qu'il peut vendre sans lire un seul chiffre.
+ *
+ * ⚠ LE ROUGE NE DIT PAS « ZÉRO ». Un article sans aucune ligne de stock dans
+ * cet entrepôt est rouge parce qu'il ne s'encaissera pas ici, mais son libellé
+ * reste « Aucun stock » : `null` ne se lit jamais « Épuisé ».
+ */
+
+/**
+ * Ce que la carte lit d'un article. L'article du comptoir mobile le satisfait
+ * tel quel ; le back-office y projette son produit de catalogue.
+ */
+interface ArticleDeCarte extends PackagedProductLike {
+    /** Non nul : l'article est sous un inventaire en cours dans cet entrepôt. */
+    verrou_inventaire: unknown;
+    track_inventory: boolean;
+    /**
+     * Disponible de l'entrepôt de la caisse. `null` : l'article n'y a AUCUNE
+     * ligne de stock, ce qui n'est pas zéro.
+     */
+    stock_quantity: number | null;
+    /** Contenants scellés disponibles, `null` si l'article ne se conditionne pas. */
+    stock_packages: number | null;
+    /** Unités au détail disponibles, `null` si l'article ne se conditionne pas. */
+    stock_loose: number | null;
+    /** Seuil de réassort, en chaîne comme en base. */
+    reorder_point?: string | null;
+    unit_symbol?: string | null;
+    packaging_unit_symbol?: string | null;
+    /** Les emplacements de l'article dans cet entrepôt, séparés par des virgules. */
+    emplacement?: string | null;
+}
+type EtatDeStock = "verrouille" | "non_suivi" | "aucun" | "epuise" | "bas" | "ok";
+/**
+ * L'état de la carte, compte tenu de ce qui est déjà au panier : le dernier
+ * article qu'on vient d'y mettre fait passer la carte au rouge tout de suite.
+ */
+declare function etatDeLaCarte(article: ArticleDeCarte, auPanier?: number): EtatDeStock;
+/**
+ * Le texte du bandeau.
+ *
+ * `court` : la vignette de 76 points n'a pas la place de « 13 BOITES + 14
+ * AMPOULES », on y écrit les symboles d'unité, comme le back-office.
+ *
+ * Le partage scellé / détail est LU, jamais recalculé : un rayon de 3 casiers
+ * et 7 bouteilles ne se présente pas comme « 43 ».
+ */
+declare function libelleDuBandeau(article: ArticleDeCarte, court?: boolean): string;
+/**
+ * Où trouver l'article : son emplacement, puis l'entrepôt de la caisse.
+ *
+ * Sans ligne de stock ici il n'est nulle part dans ce dépôt, et nommer
+ * l'entrepôt l'y ferait chercher.
+ */
+declare function lieuDeLArticle(article: ArticleDeCarte, entrepot: string | null | undefined): string;
+
+/** Comptant (le montant reçu doit solder) ou crédit (il n'est qu'un acompte). */
+type ModeReglement = "comptant" | "credit";
+interface RecalageInput {
+    mode: ModeReglement;
+    /** Total de la facture dans SA devise, points deja deduits. */
+    totalFacture: number;
+    deviseFacture: string;
+    /** Devise dans laquelle le caissier encaisse. */
+    deviseReglement: string;
+    /**
+     * Conversion PURE, SANS arrondi.
+     *
+     * ⚠ **Le nom porte le contrat, et ce n'est pas du zele.** `convertMoney` a la
+     * MEME signature : la cabler ici compilerait sans un mot, et detruirait
+     * l'information dont le plafond a besoin - 26 681 FC / 2300 vaut 11,60043...,
+     * et `convertMoney` rend deja 11,60. Plafonner 11,60 rend 11,60, et le
+     * sous-paiement revient. C'est `devises.convert` qu'il faut, la seule qui ne
+     * perde rien, et l'appelant le lit dans le nom du champ.
+     */
+    convertirBrut: (montant: number, de: string, vers: string) => number;
+    /** Nombre de decimales de la devise : 2 pour le dollar, 0 pour le franc. */
+    decimalesDe: (code: string) => number;
+}
+/** Ce qu'il faut a `montantExigible`, sans le mode ni le reste du recalage. */
+type ExigibleInput = Omit<RecalageInput, "mode">;
+/**
+ * Le plus petit montant, dans la devise encaissee, qui SOLDE reellement la
+ * facture.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ ON ARRONDIT VERS LE HAUT, ET C'EST UN CUL-DE-SAC QU'ON REFERME.         │
+ * │                                                                          │
+ * │ Le prereemplissage convertissait F -> R et arrondissait AU PLUS PROCHE ; │
+ * │ puis `tendersIn` reconvertit R -> F et arrondit dans F. Quand l'unite    │
+ * │ mineure de la devise ENCAISSEE vaut plus cher que celle de la devise de  │
+ * │ FACTURE, l'aller-retour perd de l'argent :                               │
+ * │                                                                          │
+ * │   facture 26 681 FC, encaissement en USD, 1 USD = 2300 FC                │
+ * │     26 681 / 2300 = 11,60043...  -> arrondi USD -> 11,60                 │
+ * │     11,60 x 2300  = 26 680       -> arrondi CDF -> 26 680                │
+ * │     26 680 < 26 681  =>  « sous-paye », bouton FERME                     │
+ * │                                                                          │
+ * │ Et le caissier n'a AUCUN moyen d'y repondre : aucun montant en dollars   │
+ * │ ne vaut 26 681 FC. Mesure : 19 132 cas sur 40 000 a ce taux, avec un     │
+ * │ manque jusqu'a ceil(taux/100) - 1 FC. C'est la configuration ORDINAIRE   │
+ * │ en RDC - on facture en francs, le client paie en dollars.                │
+ * │                                                                          │
+ * │ Un vrai comptoir encaisse 11,61 $ et rend 22 FC de monnaie. Tolerer le   │
+ * │ manque a la place ferait entrer une dette d'une unite mineure sur une    │
+ * │ vente que le marchand croit soldee, et le solde du client deriverait     │
+ * │ vente apres vente sans que rien ne le dise.                              │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ LA TOLERANCE EST RELATIVE A L'UNITE MINEURE, JAMAIS A `Number.EPSILON`. │
+ * │                                                                          │
+ * │ La premiere ecriture retranchait `Number.EPSILON * facteur`, soit une    │
+ * │ garde ABSOLUE de 2,22e-14 pour deux decimales - alors que l'erreur       │
+ * │ flottante CROIT avec la magnitude. Des que `converti * facteur` tombe un │
+ * │ ulp au-dessus de l'entier, `Math.ceil` ajoutait une unite mineure qui    │
+ * │ n'avait rien a faire la. Mesure sur 200 000 montants a deux decimales :  │
+ * │                                                                          │
+ * │   USD -> USD   9 160 sur-arrondis  = 4,58 %   (4,11 sortait a 4,12)      │
+ * │   USD -> CDF   6 397 sur-arrondis                                        │
+ * │   CDF -> USD     125 sur-arrondis                                        │
+ * │                                                                          │
+ * │ Et `convert` du noyau rend le montant TEL QUEL quand les deux devises    │
+ * │ coincident : le defaut frappait donc le cas MONO-DEVISE, qui est le cas  │
+ * │ ordinaire. Sur une vente de 4,11 $, le champ portait 4,11 et le bouton   │
+ * │ annoncait « Encaisser 4,12 $ » - deux nombres pour un seul encaissement, │
+ * │ et choisir un moyen de paiement suffisait a recaler le champ sur 4,12.   │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * `MONEY_EPS` est la tolerance deja employee par le projet, et par
+ * `blocageEncaissement` sur le MEME couple de montants. Elle est sure dans les
+ * deux sens : des milliers de fois au-dessus du bruit flottant, et tres en
+ * dessous de ce que `tendersIn` - qui arrondit dans la devise de FACTURE -
+ * peut voir. Mesure : zero sous-paiement introduit, dans les quatre
+ * combinaisons de devises.
+ *
+ * ⚠ A devises EGALES, l'operation est neutre : `totalFacture` est deja arrondi
+ * dans sa propre devise, donc le plafond ne deplace rien.
+ */
+declare function montantExigible(e: ExigibleInput): number;
+/**
+ * Le montant a REPOSER dans le champ, ou `null` s'il ne faut pas y toucher.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ SANS CE RECALAGE, APPLIQUER DES POINTS ANNONCE UNE MONNAIE FAUSSE.       │
+ * │                                                                          │
+ * │ Le champ garde le total BRUT ; le caissier lit alors une « monnaie a     │
+ * │ rendre » egale a la valeur des points au lieu du reste du, et il la rend  │
+ * │ - le tiroir manque le soir de ce qu'il vient d'offrir deux fois. Le      │
+ * │ back-office ferme ce defaut par `syncTenderToTotal` ; c'en est le        │
+ * │ miroir.                                                                  │
+ * │                                                                          │
+ * │ ⚠ EN CREDIT ON NE TOUCHE A RIEN : le champ y est un acompte FACULTATIF,  │
+ * │ et le remplir ferait d'une vente a credit une vente soldee, qui          │
+ * │ n'inscrirait aucune dette. Le back-office a paye ce defaut.              │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ */
+declare function recalerReglement(e: RecalageInput): string | null;
+interface BasculeDeviseInput extends ExigibleInput {
+    mode: ModeReglement;
+    /** Ce que le champ porte AVANT la bascule. */
+    saisie: string;
+    /** Devise du champ AVANT la bascule. */
+    deviseAvant: string;
+    /**
+     * Conversion PUIS arrondi (`convertMoney`) : celle qui preserve la valeur
+     * tapee, et celle que `tendersIn` refait en sens inverse pour juger le
+     * paiement. C'est donc elle, et pas `convert`, qui dit si un reglement solde.
+     */
+    convertirArrondi: (montant: number, de: string, vers: string) => number;
+}
+/**
+ * Le montant a reposer dans le champ apres un changement de devise.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ UNE BASCULE DE DEVISE NE REND JAMAIS INSUFFISANT UN REGLEMENT QUI        │
+ * │ SOLDAIT.                                                                 │
+ * │                                                                          │
+ * │ L'ecran convertissait la saisie AU PLUS PROCHE pendant que la validation │
+ * │ et le bouton employaient le PLAFOND :                                    │
+ * │                                                                          │
+ * │   facture 26 681 FC, 1 USD = 2300 FC                                     │
+ * │     champ prerempli  : 26 681 CDF                                        │
+ * │     bascule en USD   : 26 681 / 2300 arrondi au plus proche -> 11,60     │
+ * │     tendersIn(11,60) : 11,60 x 2300 = 26 680  <  26 681                  │
+ * │     => « sous-paye », bouton FERME... qui annonce « Encaisser 11,61 $ »  │
+ * │                                                                          │
+ * │ Le champ portait 11,60, le bouton disait 11,61, et AUCUN montant en      │
+ * │ dollars ne soldait la facture. C'est le cul-de-sac que `montantExigible` │
+ * │ a ete ecrit pour refermer, rouvert par une seconde porte - et l'ecran se │
+ * │ contredisait lui-meme sur le meme rendu.                                 │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * ⚠ **Un montant PARTIEL reste converti, et c'est la moitie de la regle.** La
+ * doctrine de `convertirSaisie` ne bouge pas - « on convertit, on n'efface
+ * jamais » - et relever un acompte que le caissier a voulu partiel serait lui
+ * reprendre sa saisie. On ne repose le plafond que lorsque la bascule vient de
+ * faire PERDRE une suffisance qui etait la.
+ */
+declare function montantApresBasculeDevise(e: BasculeDeviseInput): string;
+/** De quoi ramener un montant de la feuille dans la devise active. */
+interface AffichageEnDevise {
+    /** La devise de la facture : celle dans laquelle le panier totalise. */
+    deviseFacture: string;
+    /** La devise choisie dans la feuille, celle du montant reçu. */
+    deviseActive: string;
+    /** Conversion PUIS arrondi : `convertMoney`. */
+    convertirArrondi: (montant: number, de: string, vers: string) => number;
+    /** Conversion BRUTE : `convert`. Voir `montantExigible`. */
+    convertirBrut: (montant: number, de: string, vers: string) => number;
+    decimalesDe: (code: string) => number;
+}
+/**
+ * L'autre devise d'un établissement qui en tient EXACTEMENT deux.
+ *
+ * C'est elle qui porte l'équivalent entre parenthèses. Au-delà de deux, il n'y
+ * a plus « l'autre » devise, et en écrire plusieurs entre parenthèses ferait
+ * d'un total une ligne de chiffres : on n'en écrit aucune.
+ */
+declare function deviseNonActive(active: string, devisesActives: readonly string[]): string | null;
+/** Un montant de la feuille, ramené dans la devise active au plus proche. */
+declare function versActive(montant: number, depuis: string, a: AffichageEnDevise): number;
+/**
+ * Un montant ramené dans la devise active SANS JAMAIS LE DÉPASSER.
+ *
+ * Pour un plafond qu'on préremplit dans un champ : arrondi au plus proche, la
+ * cagnotte de 434,78 $ redeviendrait 1 000 001 FC, au-dessus de ce que le
+ * client possède, et le champ se refuserait lui-même à l'ouverture.
+ */
+declare function versActiveSansDepasser(montant: number, depuis: string, a: AffichageEnDevise): number;
+/** Le total à payer, et son équivalent dans l'autre devise. */
+interface RecapitulatifAffiche {
+    devise: string;
+    sousTotal: number;
+    remisesArticles: number;
+    remise: number;
+    cagnotte: number;
+    taxe: number;
+    /**
+     * Ce qu'il faut RECEVOIR dans la devise active : `montantExigible`, le même
+     * nombre que le bouton « Encaisser » et le champ prérempli. Le total au plus
+     * proche annoncerait 11,60 $ là où il faut 11,61 $ pour solder la facture.
+     */
+    total: number;
+    /** L'équivalent entre parenthèses, `null` sans seconde devise. */
+    equivalent: {
+        montant: number;
+        devise: string;
+    } | null;
+    /**
+     * La facture est-elle établie dans une AUTRE devise que celle affichée ?
+     * Alors les lignes sont des conversions arrondies, qui peuvent différer
+     * d'une unité du total, et l'écran le dit.
+     */
+    convertie: boolean;
+}
+declare function recapitulatifAffiche(e: AffichageEnDevise & {
+    facture: Pick<SaleCurrencyTotals, "subtotal" | "itemDiscount" | "globalDiscount" | "loyaltyDiscount" | "tax">;
+    /** Total de la facture dans SA devise, cagnotte déduite. */
+    totalFacture: number;
+    devisesActives: readonly string[];
+}): RecapitulatifAffiche;
+/**
+ * Ce qu'il manque, dans la devise active : ce qu'il faut ENCORE remettre.
+ *
+ * Par `montantExigible`, comme le total : « il manque 11,60 $ » alors que
+ * 11,60 $ ne suffisent pas ferait refaire un aller-retour au caissier.
+ */
+declare function manqueAffiche(manque: number, a: AffichageEnDevise): number;
+/**
+ * Le montant de cagnotte saisi dans la devise active, ramené dans la devise
+ * PRINCIPALE où la cagnotte est tenue, et borné par le plafond de la vente.
+ *
+ * ⚠ ARRONDI AUX DÉCIMALES DE LA PRINCIPALE : 1 000 000 FC valent 434,7826 $,
+ * et le serveur refuse un montant à quatre décimales - la vente entière
+ * partirait en quarantaine, ticket imprimé.
+ */
+declare function cagnotteVersPrincipale(e: {
+    saisie: number;
+    deviseActive: string;
+    principale: string;
+    /** Le plafond de la vente, en principale. */
+    plafond: number;
+    convertirBrut: (montant: number, de: string, vers: string) => number;
+    arrondir: (montant: number, code: string) => number;
+}): number;
+/**
+ * Le repère de taux, « 1 USD = 2 300 FC », dans le sens où le nombre se lit.
+ *
+ * ⚠ « 1 CDF = 0 $ » sortait d'un franc converti en dollars puis arrondi au
+ * centime : un repère qui ne dit rien. On écrit toujours la devise FORTE à
+ * gauche, quelle que soit la devise reçue.
+ */
+declare function libelleDuTaux(deviseRecue: string, deviseFacture: string, convertirArrondi: (montant: number, de: string, vers: string) => number, argent: (montant: number, code: string) => string): string;
+
+/**
  * Arithmétique du point de vente, partagée par le back-office et le mobile.
  *
  * Tout ce qui décide d'un montant vit ici. Les deux surfaces peuvent différer
  * sur la disposition, jamais sur le chiffre.
  */
 
+type index_AffichageEnDevise = AffichageEnDevise;
+type index_ArticleDeCarte = ArticleDeCarte;
+type index_BasculeDeviseInput = BasculeDeviseInput;
 type index_BasketInput = BasketInput;
 type index_BasketLine = BasketLine;
 type index_BasketProduct = BasketProduct;
@@ -1041,17 +1414,23 @@ type index_CurrencyTable = CurrencyTable;
 declare const index_DOUCHETTE_AU_REPOS: typeof DOUCHETTE_AU_REPOS;
 declare const index_ECART_ENTREE_MAX_MS: typeof ECART_ENTREE_MAX_MS;
 declare const index_ECART_MAX_MS: typeof ECART_MAX_MS;
+type index_EtatDeStock = EtatDeStock;
 type index_EtatDouchette = EtatDouchette;
 type index_EtatQuantite = EtatQuantite;
 type index_EtatRescan<T> = EtatRescan<T>;
+type index_ExigibleInput = ExigibleInput;
 declare const index_LONGUEUR_MIN: typeof LONGUEUR_MIN;
 type index_LigneStockee = LigneStockee;
 type index_LoyaltyProgramLike = LoyaltyProgramLike;
 declare const index_MONEY_EPS: typeof MONEY_EPS;
+type index_ModeReglement = ModeReglement;
 type index_MonnaieInput = MonnaieInput;
 type index_OptionsEncaissement = OptionsEncaissement;
 type index_OrganizationCurrencyLike = OrganizationCurrencyLike;
+type index_PrixAvecEquivalent = PrixAvecEquivalent;
 type index_QuantiteInitialeInput = QuantiteInitialeInput;
+type index_RecalageInput = RecalageInput;
+type index_RecapitulatifAffiche = RecapitulatifAffiche;
 type index_Rupture = Rupture;
 type index_Saisie = Saisie;
 type index_SaleCurrencyInput = SaleCurrencyInput;
@@ -1074,31 +1453,45 @@ declare const index_addableSealed: typeof addableSealed;
 declare const index_basculerCanal: typeof basculerCanal;
 declare const index_basketTotals: typeof basketTotals;
 declare const index_buildSalePayload: typeof buildSalePayload;
+declare const index_cagnotteVersPrincipale: typeof cagnotteVersPrincipale;
 declare const index_canalParDefaut: typeof canalParDefaut;
 declare const index_candidatsDuScan: typeof candidatsDuScan;
 declare const index_createCurrencyTable: typeof createCurrencyTable;
+declare const index_deviseEquivalente: typeof deviseEquivalente;
+declare const index_deviseNonActive: typeof deviseNonActive;
+declare const index_devisesAffichables: typeof devisesAffichables;
 declare const index_estLeMemeArticle: typeof estLeMemeArticle;
+declare const index_etatDeLaCarte: typeof etatDeLaCarte;
 declare const index_evaluateCredit: typeof evaluateCredit;
 declare const index_frapper: typeof frapper;
 declare const index_frapperDansLaSaisie: typeof frapperDansLaSaisie;
 declare const index_inCart: typeof inCart;
+declare const index_libelleDuBandeau: typeof libelleDuBandeau;
+declare const index_libelleDuTaux: typeof libelleDuTaux;
+declare const index_lieuDeLArticle: typeof lieuDeLArticle;
 declare const index_lignesEnRupture: typeof lignesEnRupture;
 declare const index_lineGross: typeof lineGross;
 declare const index_looseQuantityOf: typeof looseQuantityOf;
 declare const index_loyaltyDiscount: typeof loyaltyDiscount;
 declare const index_loyaltyEarned: typeof loyaltyEarned;
+declare const index_manqueAffiche: typeof manqueAffiche;
 declare const index_maxGlobalDiscount: typeof maxGlobalDiscount;
 declare const index_maxLoyaltyAmount: typeof maxLoyaltyAmount;
 declare const index_maxUsableCredit: typeof maxUsableCredit;
 declare const index_monnaieARendre: typeof monnaieARendre;
+declare const index_montantApresBasculeDevise: typeof montantApresBasculeDevise;
+declare const index_montantExigible: typeof montantExigible;
 declare const index_motifDuVerrou: typeof motifDuVerrou;
 declare const index_motifStockInconnu: typeof motifStockInconnu;
 declare const index_motifsEncaissement: typeof motifsEncaissement;
 declare const index_packagingFactorOf: typeof packagingFactorOf;
 declare const index_panierServable: typeof panierServable;
+declare const index_prixAvecEquivalent: typeof prixAvecEquivalent;
 declare const index_quantiteApresRescan: typeof quantiteApresRescan;
 declare const index_quantiteInitiale: typeof quantiteInitiale;
 declare const index_r2: typeof r2;
+declare const index_recalerReglement: typeof recalerReglement;
+declare const index_recapitulatifAffiche: typeof recapitulatifAffiche;
 declare const index_rescanAuRepos: typeof rescanAuRepos;
 declare const index_saisieDeQuantite: typeof saisieDeQuantite;
 declare const index_saleCurrencyTotals: typeof saleCurrencyTotals;
@@ -1106,8 +1499,10 @@ declare const index_tendersIn: typeof tendersIn;
 declare const index_totalInSaleCurrency: typeof totalInSaleCurrency;
 declare const index_totauxParDevise: typeof totauxParDevise;
 declare const index_verifierAjout: typeof verifierAjout;
+declare const index_versActive: typeof versActive;
+declare const index_versActiveSansDepasser: typeof versActiveSansDepasser;
 declare namespace index {
-  export { type index_BasketInput as BasketInput, type index_BasketLine as BasketLine, type index_BasketProduct as BasketProduct, type index_BasketTotals as BasketTotals, type index_CanalQuantite as CanalQuantite, type index_CauseRefusEncaissement as CauseRefusEncaissement, type index_CreditCustomerLike as CreditCustomerLike, type index_CreditVerdict as CreditVerdict, type index_CurrencyFallback as CurrencyFallback, type index_CurrencyTable as CurrencyTable, index_DOUCHETTE_AU_REPOS as DOUCHETTE_AU_REPOS, index_ECART_ENTREE_MAX_MS as ECART_ENTREE_MAX_MS, index_ECART_MAX_MS as ECART_MAX_MS, type index_EtatDouchette as EtatDouchette, type index_EtatQuantite as EtatQuantite, type index_EtatRescan as EtatRescan, index_LONGUEUR_MIN as LONGUEUR_MIN, type index_LigneStockee as LigneStockee, type index_LoyaltyProgramLike as LoyaltyProgramLike, index_MONEY_EPS as MONEY_EPS, type index_MonnaieInput as MonnaieInput, type index_OptionsEncaissement as OptionsEncaissement, type index_OrganizationCurrencyLike as OrganizationCurrencyLike, type index_QuantiteInitialeInput as QuantiteInitialeInput, type index_Rupture as Rupture, type index_Saisie as Saisie, type index_SaleCurrencyInput as SaleCurrencyInput, type index_SaleCurrencyLine as SaleCurrencyLine, type index_SaleCurrencyTotals as SaleCurrencyTotals, type index_SaleItemPayload as SaleItemPayload, type index_SalePayload as SalePayload, type index_SalePayloadInput as SalePayloadInput, type index_SalePaymentPayload as SalePaymentPayload, type index_SaleTender as SaleTender, type index_ScanDansLaSaisie as ScanDansLaSaisie, type index_StockedProductLike as StockedProductLike, type index_TenderLike as TenderLike, type index_TotalParDevise as TotalParDevise, type index_VerdictAjout as VerdictAjout, index_addableBase as addableBase, index_addableChannels as addableChannels, index_addableLoose as addableLoose, index_addableSealed as addableSealed, index_basculerCanal as basculerCanal, index_basketTotals as basketTotals, index_buildSalePayload as buildSalePayload, index_canalParDefaut as canalParDefaut, index_candidatsDuScan as candidatsDuScan, index_createCurrencyTable as createCurrencyTable, index_estLeMemeArticle as estLeMemeArticle, index_evaluateCredit as evaluateCredit, index_frapper as frapper, index_frapperDansLaSaisie as frapperDansLaSaisie, index_inCart as inCart, index_lignesEnRupture as lignesEnRupture, index_lineGross as lineGross, index_looseQuantityOf as looseQuantityOf, index_loyaltyDiscount as loyaltyDiscount, index_loyaltyEarned as loyaltyEarned, index_maxGlobalDiscount as maxGlobalDiscount, index_maxLoyaltyAmount as maxLoyaltyAmount, index_maxUsableCredit as maxUsableCredit, index_monnaieARendre as monnaieARendre, index_motifDuVerrou as motifDuVerrou, index_motifStockInconnu as motifStockInconnu, index_motifsEncaissement as motifsEncaissement, index_packagingFactorOf as packagingFactorOf, index_panierServable as panierServable, index_quantiteApresRescan as quantiteApresRescan, index_quantiteInitiale as quantiteInitiale, index_r2 as r2, index_rescanAuRepos as rescanAuRepos, index_saisieDeQuantite as saisieDeQuantite, index_saleCurrencyTotals as saleCurrencyTotals, index_tendersIn as tendersIn, index_totalInSaleCurrency as totalInSaleCurrency, index_totauxParDevise as totauxParDevise, index_verifierAjout as verifierAjout };
+  export { type index_AffichageEnDevise as AffichageEnDevise, type index_ArticleDeCarte as ArticleDeCarte, type index_BasculeDeviseInput as BasculeDeviseInput, type index_BasketInput as BasketInput, type index_BasketLine as BasketLine, type index_BasketProduct as BasketProduct, type index_BasketTotals as BasketTotals, type index_CanalQuantite as CanalQuantite, type index_CauseRefusEncaissement as CauseRefusEncaissement, type index_CreditCustomerLike as CreditCustomerLike, type index_CreditVerdict as CreditVerdict, type index_CurrencyFallback as CurrencyFallback, type index_CurrencyTable as CurrencyTable, index_DOUCHETTE_AU_REPOS as DOUCHETTE_AU_REPOS, index_ECART_ENTREE_MAX_MS as ECART_ENTREE_MAX_MS, index_ECART_MAX_MS as ECART_MAX_MS, type index_EtatDeStock as EtatDeStock, type index_EtatDouchette as EtatDouchette, type index_EtatQuantite as EtatQuantite, type index_EtatRescan as EtatRescan, type index_ExigibleInput as ExigibleInput, index_LONGUEUR_MIN as LONGUEUR_MIN, type index_LigneStockee as LigneStockee, type index_LoyaltyProgramLike as LoyaltyProgramLike, index_MONEY_EPS as MONEY_EPS, type index_ModeReglement as ModeReglement, type index_MonnaieInput as MonnaieInput, type index_OptionsEncaissement as OptionsEncaissement, type index_OrganizationCurrencyLike as OrganizationCurrencyLike, type index_PrixAvecEquivalent as PrixAvecEquivalent, type index_QuantiteInitialeInput as QuantiteInitialeInput, type index_RecalageInput as RecalageInput, type index_RecapitulatifAffiche as RecapitulatifAffiche, type index_Rupture as Rupture, type index_Saisie as Saisie, type index_SaleCurrencyInput as SaleCurrencyInput, type index_SaleCurrencyLine as SaleCurrencyLine, type index_SaleCurrencyTotals as SaleCurrencyTotals, type index_SaleItemPayload as SaleItemPayload, type index_SalePayload as SalePayload, type index_SalePayloadInput as SalePayloadInput, type index_SalePaymentPayload as SalePaymentPayload, type index_SaleTender as SaleTender, type index_ScanDansLaSaisie as ScanDansLaSaisie, type index_StockedProductLike as StockedProductLike, type index_TenderLike as TenderLike, type index_TotalParDevise as TotalParDevise, type index_VerdictAjout as VerdictAjout, index_addableBase as addableBase, index_addableChannels as addableChannels, index_addableLoose as addableLoose, index_addableSealed as addableSealed, index_basculerCanal as basculerCanal, index_basketTotals as basketTotals, index_buildSalePayload as buildSalePayload, index_cagnotteVersPrincipale as cagnotteVersPrincipale, index_canalParDefaut as canalParDefaut, index_candidatsDuScan as candidatsDuScan, index_createCurrencyTable as createCurrencyTable, index_deviseEquivalente as deviseEquivalente, index_deviseNonActive as deviseNonActive, index_devisesAffichables as devisesAffichables, index_estLeMemeArticle as estLeMemeArticle, index_etatDeLaCarte as etatDeLaCarte, index_evaluateCredit as evaluateCredit, index_frapper as frapper, index_frapperDansLaSaisie as frapperDansLaSaisie, index_inCart as inCart, index_libelleDuBandeau as libelleDuBandeau, index_libelleDuTaux as libelleDuTaux, index_lieuDeLArticle as lieuDeLArticle, index_lignesEnRupture as lignesEnRupture, index_lineGross as lineGross, index_looseQuantityOf as looseQuantityOf, index_loyaltyDiscount as loyaltyDiscount, index_loyaltyEarned as loyaltyEarned, index_manqueAffiche as manqueAffiche, index_maxGlobalDiscount as maxGlobalDiscount, index_maxLoyaltyAmount as maxLoyaltyAmount, index_maxUsableCredit as maxUsableCredit, index_monnaieARendre as monnaieARendre, index_montantApresBasculeDevise as montantApresBasculeDevise, index_montantExigible as montantExigible, index_motifDuVerrou as motifDuVerrou, index_motifStockInconnu as motifStockInconnu, index_motifsEncaissement as motifsEncaissement, index_packagingFactorOf as packagingFactorOf, index_panierServable as panierServable, index_prixAvecEquivalent as prixAvecEquivalent, index_quantiteApresRescan as quantiteApresRescan, index_quantiteInitiale as quantiteInitiale, index_r2 as r2, index_recalerReglement as recalerReglement, index_recapitulatifAffiche as recapitulatifAffiche, index_rescanAuRepos as rescanAuRepos, index_saisieDeQuantite as saisieDeQuantite, index_saleCurrencyTotals as saleCurrencyTotals, index_tendersIn as tendersIn, index_totalInSaleCurrency as totalInSaleCurrency, index_totauxParDevise as totauxParDevise, index_verifierAjout as verifierAjout, index_versActive as versActive, index_versActiveSansDepasser as versActiveSansDepasser };
 }
 
-export { type SaleCurrencyInput as $, type BasketProduct as A, type BasketInput as B, type ChannelAvailability as C, type BasketTotals as D, type CanalQuantite as E, type CauseRefusEncaissement as F, type CreditCustomerLike as G, type CreditVerdict as H, DOUCHETTE_AU_REPOS as I, ECART_ENTREE_MAX_MS as J, ECART_MAX_MS as K, type EtatDouchette as L, MAX_QUANTITY as M, type EtatQuantite as N, type OrganizationCurrency as O, type PackagedProductLike as P, QUANTITY_DECIMALS as Q, type EtatRescan as R, type StockCounters as S, LONGUEUR_MIN as T, type LigneStockee as U, type LoyaltyProgramLike as V, type MonnaieInput as W, type OptionsEncaissement as X, type QuantiteInitialeInput as Y, type Rupture as Z, type Saisie as _, type CurrencyFallback as a, type SaleCurrencyLine as a0, type SaleCurrencyTotals as a1, type SaleItemPayload as a2, type SalePayload as a3, type SalePayloadInput as a4, type SalePaymentPayload as a5, type SaleTender as a6, type ScanDansLaSaisie as a7, type StockedProductLike as a8, type TenderLike as a9, motifStockInconnu as aA, motifsEncaissement as aB, packagingFactorOf as aC, panierServable as aD, quantiteApresRescan as aE, quantiteInitiale as aF, rescanAuRepos as aG, saisieDeQuantite as aH, saleCurrencyTotals as aI, tendersIn as aJ, totalInSaleCurrency as aK, totauxParDevise as aL, verifierAjout as aM, type TotalParDevise as aa, type VerdictAjout as ab, addableBase as ac, addableChannels as ad, addableLoose as ae, addableSealed as af, basculerCanal as ag, basketTotals as ah, buildSalePayload as ai, canalParDefaut as aj, candidatsDuScan as ak, estLeMemeArticle as al, evaluateCredit as am, frapper as an, frapperDansLaSaisie as ao, inCart as ap, lignesEnRupture as aq, lineGross as ar, looseQuantityOf as as, loyaltyDiscount as at, loyaltyEarned as au, maxGlobalDiscount as av, maxLoyaltyAmount as aw, maxUsableCredit as ax, monnaieARendre as ay, motifDuVerrou as az, type CurrencyInfo as b, type CurrencyTable as c, MIN_QUANTITY as d, MONEY_EPS as e, type MoneyHelpers as f, type OrganizationCurrencyLike as g, type Packaging as h, QUANTITY_INTEGER_DIGITS as i, availableBase as j, availableSplit as k, createCurrencyTable as l, createMoneyHelpers as m, formatPackaged as n, formatPackagedDifference as o, formatPackagedSplit as p, formatQuantity as q, formatUnitQuantity as r, getPackaging as s, index as t, r2 as u, remainingChannels as v, roundQuantity as w, splitPackaged as x, toBaseQuantity as y, type BasketLine as z };
+export { type ModeReglement as $, type AffichageEnDevise as A, type BasculeDeviseInput as B, type ChannelAvailability as C, type BasketInput as D, type BasketLine as E, type BasketProduct as F, type BasketTotals as G, type CanalQuantite as H, type CauseRefusEncaissement as I, type CreditCustomerLike as J, type CreditVerdict as K, DOUCHETTE_AU_REPOS as L, MAX_QUANTITY as M, ECART_ENTREE_MAX_MS as N, type OrganizationCurrency as O, type PackagedProductLike as P, QUANTITY_DECIMALS as Q, ECART_MAX_MS as R, type StockCounters as S, type EtatDeStock as T, type EtatDouchette as U, type EtatQuantite as V, type EtatRescan as W, type ExigibleInput as X, LONGUEUR_MIN as Y, type LigneStockee as Z, type LoyaltyProgramLike as _, type CurrencyFallback as a, recalerReglement as a$, type MonnaieInput as a0, type OptionsEncaissement as a1, type PrixAvecEquivalent as a2, type QuantiteInitialeInput as a3, type RecalageInput as a4, type RecapitulatifAffiche as a5, type Rupture as a6, type Saisie as a7, type SaleCurrencyInput as a8, type SaleCurrencyLine as a9, evaluateCredit as aA, frapper as aB, frapperDansLaSaisie as aC, inCart as aD, libelleDuBandeau as aE, libelleDuTaux as aF, lieuDeLArticle as aG, lignesEnRupture as aH, lineGross as aI, looseQuantityOf as aJ, loyaltyDiscount as aK, loyaltyEarned as aL, manqueAffiche as aM, maxGlobalDiscount as aN, maxLoyaltyAmount as aO, maxUsableCredit as aP, monnaieARendre as aQ, montantApresBasculeDevise as aR, montantExigible as aS, motifDuVerrou as aT, motifStockInconnu as aU, motifsEncaissement as aV, packagingFactorOf as aW, panierServable as aX, prixAvecEquivalent as aY, quantiteApresRescan as aZ, quantiteInitiale as a_, type SaleCurrencyTotals as aa, type SaleItemPayload as ab, type SalePayload as ac, type SalePayloadInput as ad, type SalePaymentPayload as ae, type SaleTender as af, type ScanDansLaSaisie as ag, type StockedProductLike as ah, type TenderLike as ai, type TotalParDevise as aj, type VerdictAjout as ak, addableBase as al, addableChannels as am, addableLoose as an, addableSealed as ao, basculerCanal as ap, basketTotals as aq, buildSalePayload as ar, cagnotteVersPrincipale as as, canalParDefaut as at, candidatsDuScan as au, deviseEquivalente as av, deviseNonActive as aw, devisesAffichables as ax, estLeMemeArticle as ay, etatDeLaCarte as az, type CurrencyInfo as b, recapitulatifAffiche as b0, rescanAuRepos as b1, saisieDeQuantite as b2, saleCurrencyTotals as b3, tendersIn as b4, totalInSaleCurrency as b5, totauxParDevise as b6, verifierAjout as b7, versActive as b8, versActiveSansDepasser as b9, type CurrencyTable as c, MIN_QUANTITY as d, MONEY_EPS as e, type MoneyHelpers as f, type OrganizationCurrencyLike as g, type Packaging as h, QUANTITY_INTEGER_DIGITS as i, availableBase as j, availableSplit as k, createCurrencyTable as l, createMoneyHelpers as m, formatPackaged as n, formatPackagedDifference as o, formatPackagedSplit as p, formatQuantity as q, formatUnitQuantity as r, getPackaging as s, index as t, r2 as u, remainingChannels as v, roundQuantity as w, splitPackaged as x, toBaseQuantity as y, type ArticleDeCarte as z };

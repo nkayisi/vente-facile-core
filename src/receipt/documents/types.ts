@@ -21,7 +21,8 @@ export type DocumentKind =
   | "sale_return"
   | "cash_session"
   | "expense"
-  | "expense_request";
+  | "expense_request"
+  | "day_report";
 
 export interface DocumentIdentity {
   /** Texte du bandeau inversé. */
@@ -73,6 +74,16 @@ export const DOCUMENT_IDENTITIES: Record<DocumentKind, DocumentIdentity> = {
     sub: "Ne vaut pas justificatif de sortie de caisse",
     prefix: "DEP",
     numberLabel: "Demande n°",
+  },
+  /**
+   * Lecture de contrôle de la journée : ni numéro, ni valeur probante. Le
+   * terminal ne la range pas, elle se régénère depuis l'écran.
+   */
+  day_report: {
+    band: "RAPPORT DE LA JOURNÉE",
+    sub: "Lecture de contrôle, ne clôture aucune caisse",
+    prefix: "",
+    numberLabel: "",
   },
 };
 

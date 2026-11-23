@@ -12,3 +12,6 @@ export * from "./payload";
 export * from "./stock";
 export * from "./quantite-initiale";
 export * from "./douchette";
+export * from "./affichage-devise";
+export * from "./carte";
+export * from "./encaissement-affichage";

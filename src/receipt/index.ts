@@ -68,3 +68,10 @@ export {
   type ExpenseReceiptData,
   type ExpenseRequestData,
 } from "./documents/cash-session";
+
+export {
+  buildDayReport,
+  LIGNES_MAX_RAPPORT,
+  type DayReportData,
+  type DayReportSale,
+} from "./documents/day-report";

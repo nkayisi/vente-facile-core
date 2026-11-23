@@ -7,6 +7,7 @@ import {
   QUANTITY_INTEGER_DIGITS,
   availableBase,
   availableSplit,
+  convertirSaisie,
   createCurrencyTable,
   createMoneyHelpers,
   formatDate,
@@ -28,8 +29,10 @@ import {
   formatUnitQuantity,
   getDefaultCurrency,
   getPackaging,
+  lireNombre,
   monthLong,
   monthShort,
+  montrerConversion,
   pos_exports,
   r2,
   remainingChannels,
@@ -38,14 +41,14 @@ import {
   splitPackaged,
   toBaseQuantity,
   weekdayLong
-} from "./chunk-GX27YV5E.js";
+} from "./chunk-AZRPTSJ6.js";
 import {
   SUPPORTED_CURRENCIES,
   getCurrencyByCode,
   getCurrencyName,
   getCurrencySymbol,
   receipt_exports
-} from "./chunk-RYLSSDZB.js";
+} from "./chunk-BSDTYYIF.js";
 import {
   pluralizeUnit
 } from "./chunk-B5W4KJNN.js";
@@ -329,18 +332,119 @@ function dueDateLabel(dueDate) {
   if (late === 0) return "\xC9choit aujourd'hui";
   return `\xC9choit dans ${-late} j`;
 }
+
+// src/casse.ts
+var SEPARATEUR = /[\s\-/(]/;
+var LETTRE = /\p{L}/u;
+function casseDeTitre(nom) {
+  let sortie = "";
+  let debutDeMot = true;
+  for (const caractere of nom.toLowerCase()) {
+    if (SEPARATEUR.test(caractere)) {
+      sortie += caractere;
+      debutDeMot = true;
+      continue;
+    }
+    if (debutDeMot) {
+      sortie += LETTRE.test(caractere) ? caractere.toUpperCase() : caractere;
+      debutDeMot = false;
+      continue;
+    }
+    sortie += caractere;
+  }
+  return sortie;
+}
+
+// src/journee.ts
+var CHOIX_JOURNEE_VIDE = { entrepot: null, utilisateur: null };
+var AUCUN_CHAMP = { entrepot: false, utilisateur: false, tousLesEntrepots: false };
+function champsDeLaJournee(m) {
+  if (m.role === null || m.role === "cashier") return AUCUN_CHAMP;
+  const tous = litTousLesEntrepots(m);
+  if (!tous && m.affectes.length === 0) return AUCUN_CHAMP;
+  return { entrepot: true, utilisateur: true, tousLesEntrepots: tous };
+}
+function afficheFiltresDeLaJournee(m) {
+  const c = champsDeLaJournee(m);
+  return c.entrepot || c.utilisateur;
+}
+var PORTEE_MOI = { kind: "moi" };
+function porteeDeLaJournee(m, choix) {
+  const champs = champsDeLaJournee(m);
+  if (!champs.entrepot && !champs.utilisateur) return PORTEE_MOI;
+  const permis = new Set(m.affectes.map((e) => e.id));
+  const entrepot = champs.entrepot ? choixEntrepotRecevable(choix.entrepot, permis, champs.tousLesEntrepots) : null;
+  const utilisateur = champs.utilisateur ? choix.utilisateur : null;
+  if (utilisateur && utilisateur !== CHOIX_TOUS) {
+    return { kind: "membre", utilisateur, entrepot };
+  }
+  if (utilisateur === CHOIX_TOUS || entrepot) {
+    return { kind: "equipe", entrepot };
+  }
+  return PORTEE_MOI;
+}
+function parametresDeLaJournee(p, moi) {
+  const entrepot = (e) => e === CHOIX_TOUS ? { all_warehouses: "1" } : e ? { warehouse: e } : {};
+  switch (p.kind) {
+    case "moi":
+      return { user: moi };
+    case "membre":
+      return { user: p.utilisateur, ...entrepot(p.entrepot) };
+    case "equipe":
+      return p.entrepot ? entrepot(p.entrepot) : { all_users: "1" };
+  }
+}
+function libelleEntrepotVide(m) {
+  return libelleDefautEntrepot(m);
+}
+function libelleUtilisateurVide(choix) {
+  return choix.entrepot ? LIBELLE_TOUTE_L_EQUIPE : "Moi uniquement";
+}
+var LIBELLE_TOUTE_L_EQUIPE = "Toute l'\xE9quipe";
+function proposeTouteLEquipe(choix) {
+  return !choix.entrepot;
+}
+function proposeSoiMeme(choix) {
+  return Boolean(choix.entrepot);
+}
+function libelleDeLaPortee(p, noms) {
+  const nomEntrepot = (e) => {
+    if (e === CHOIX_TOUS) return "Tous les entrep\xF4ts";
+    if (!e) return null;
+    return noms.entrepot(e) ?? "Entrep\xF4t";
+  };
+  switch (p.kind) {
+    case "moi":
+      return "Mes op\xE9rations";
+    case "membre": {
+      const qui = noms.utilisateur(p.utilisateur) ?? "Membre de l'\xE9quipe";
+      const ou = nomEntrepot(p.entrepot);
+      return ou ? `${qui} \xB7 ${ou}` : qui;
+    }
+    case "equipe": {
+      if (p.entrepot === CHOIX_TOUS || !p.entrepot && noms.role === "owner") {
+        return "Tout l'\xE9tablissement";
+      }
+      const ou = nomEntrepot(p.entrepot);
+      return ou ? `${ou} \xB7 toute l'\xE9quipe` : "Toute l'\xE9quipe de mes entrep\xF4ts";
+    }
+  }
+}
 export {
+  CHOIX_JOURNEE_VIDE,
   CHOIX_TOUS,
   DEFAULT_COUNTRY,
   LIBELLES_CASES_PERIMETRE,
   LIBELLES_VERROU_PERIMETRE,
   LIBELLE_TOUS_ENTREPOTS,
   LIBELLE_TOUS_UTILISATEURS,
+  LIBELLE_TOUTE_L_EQUIPE,
   MAX_QUANTITY,
   MIN_QUANTITY,
   MONEY_EPS,
   NNBSP,
   PERMISSION_VOIR_TOUT,
+  PORTEE_MOI,
   QUANTITY_DECIMALS,
   QUANTITY_INTEGER_DIGITS,
   ROLE_HIERARCHY,
@@ -349,6 +453,7 @@ export {
   SUPPORTED_CURRENCIES,
   afficheFiltreEntrepot,
   afficheFiltreUtilisateur,
+  afficheFiltresDeLaJournee,
   afficheFiltresPerimetre,
   availableBase,
   availableSplit,
@@ -356,8 +461,11 @@ export {
   canManageRole,
   caseConsulterTousUtile,
   caseVoirToutUtile,
+  casseDeTitre,
+  champsDeLaJournee,
   choixEntrepotRecevable,
   computeMargin,
+  convertirSaisie,
   createCurrencyTable,
   createMoneyHelpers,
   daysLate,
@@ -396,18 +504,27 @@ export {
   isAtLeastRole,
   isOverdue,
   isRole,
+  libelleDeLaPortee,
   libelleDefautEntrepot,
   libelleDefautUtilisateur,
+  libelleEntrepotVide,
+  libelleUtilisateurVide,
+  lireNombre,
   litTousLesEntrepots,
   membreDepuisPermissions,
   monthLong,
   monthShort,
+  montrerConversion,
   packageEquivalent,
+  parametresDeLaJournee,
   parametresDuChoix,
   pluralizeUnit,
+  porteeDeLaJournee,
   pos_exports as pos,
+  proposeSoiMeme,
   proposeTousLesEntrepots,
   proposeTousLesUtilisateurs,
+  proposeTouteLEquipe,
   r2,
   receipt_exports as receipt,
   remainingChannels,

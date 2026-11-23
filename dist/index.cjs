@@ -20,17 +20,20 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.ts
 var index_exports = {};
 __export(index_exports, {
+  CHOIX_JOURNEE_VIDE: () => CHOIX_JOURNEE_VIDE,
   CHOIX_TOUS: () => CHOIX_TOUS,
   DEFAULT_COUNTRY: () => DEFAULT_COUNTRY,
   LIBELLES_CASES_PERIMETRE: () => LIBELLES_CASES_PERIMETRE,
   LIBELLES_VERROU_PERIMETRE: () => LIBELLES_VERROU_PERIMETRE,
   LIBELLE_TOUS_ENTREPOTS: () => LIBELLE_TOUS_ENTREPOTS,
   LIBELLE_TOUS_UTILISATEURS: () => LIBELLE_TOUS_UTILISATEURS,
+  LIBELLE_TOUTE_L_EQUIPE: () => LIBELLE_TOUTE_L_EQUIPE,
   MAX_QUANTITY: () => MAX_QUANTITY,
   MIN_QUANTITY: () => MIN_QUANTITY,
   MONEY_EPS: () => MONEY_EPS,
   NNBSP: () => NNBSP,
   PERMISSION_VOIR_TOUT: () => PERMISSION_VOIR_TOUT,
+  PORTEE_MOI: () => PORTEE_MOI,
   QUANTITY_DECIMALS: () => QUANTITY_DECIMALS,
   QUANTITY_INTEGER_DIGITS: () => QUANTITY_INTEGER_DIGITS,
   ROLE_HIERARCHY: () => ROLE_HIERARCHY,
@@ -39,6 +42,7 @@ __export(index_exports, {
   SUPPORTED_CURRENCIES: () => SUPPORTED_CURRENCIES,
   afficheFiltreEntrepot: () => afficheFiltreEntrepot,
   afficheFiltreUtilisateur: () => afficheFiltreUtilisateur,
+  afficheFiltresDeLaJournee: () => afficheFiltresDeLaJournee,
   afficheFiltresPerimetre: () => afficheFiltresPerimetre,
   availableBase: () => availableBase,
   availableSplit: () => availableSplit,
@@ -46,8 +50,11 @@ __export(index_exports, {
   canManageRole: () => canManageRole,
   caseConsulterTousUtile: () => caseConsulterTousUtile,
   caseVoirToutUtile: () => caseVoirToutUtile,
+  casseDeTitre: () => casseDeTitre,
+  champsDeLaJournee: () => champsDeLaJournee,
   choixEntrepotRecevable: () => choixEntrepotRecevable,
   computeMargin: () => computeMargin,
+  convertirSaisie: () => convertirSaisie,
   createCurrencyTable: () => createCurrencyTable,
   createMoneyHelpers: () => createMoneyHelpers,
   daysLate: () => daysLate,
@@ -86,18 +93,27 @@ __export(index_exports, {
   isAtLeastRole: () => isAtLeastRole,
   isOverdue: () => isOverdue,
   isRole: () => isRole,
+  libelleDeLaPortee: () => libelleDeLaPortee,
   libelleDefautEntrepot: () => libelleDefautEntrepot,
   libelleDefautUtilisateur: () => libelleDefautUtilisateur,
+  libelleEntrepotVide: () => libelleEntrepotVide,
+  libelleUtilisateurVide: () => libelleUtilisateurVide,
+  lireNombre: () => lireNombre,
   litTousLesEntrepots: () => litTousLesEntrepots,
   membreDepuisPermissions: () => membreDepuisPermissions,
   monthLong: () => monthLong,
   monthShort: () => monthShort,
+  montrerConversion: () => montrerConversion,
   packageEquivalent: () => packageEquivalent,
+  parametresDeLaJournee: () => parametresDeLaJournee,
   parametresDuChoix: () => parametresDuChoix,
   pluralizeUnit: () => pluralizeUnit,
+  porteeDeLaJournee: () => porteeDeLaJournee,
   pos: () => pos_exports,
+  proposeSoiMeme: () => proposeSoiMeme,
   proposeTousLesEntrepots: () => proposeTousLesEntrepots,
   proposeTousLesUtilisateurs: () => proposeTousLesUtilisateurs,
+  proposeTouteLEquipe: () => proposeTouteLEquipe,
   r2: () => r2,
   receipt: () => receipt_exports,
   remainingChannels: () => remainingChannels,
@@ -772,13 +788,140 @@ function dueDateLabel(dueDate) {
   return `\xC9choit dans ${-late} j`;
 }
 
+// src/casse.ts
+var SEPARATEUR = /[\s\-/(]/;
+var LETTRE = /\p{L}/u;
+function casseDeTitre(nom) {
+  let sortie = "";
+  let debutDeMot = true;
+  for (const caractere of nom.toLowerCase()) {
+    if (SEPARATEUR.test(caractere)) {
+      sortie += caractere;
+      debutDeMot = true;
+      continue;
+    }
+    if (debutDeMot) {
+      sortie += LETTRE.test(caractere) ? caractere.toUpperCase() : caractere;
+      debutDeMot = false;
+      continue;
+    }
+    sortie += caractere;
+  }
+  return sortie;
+}
+
+// src/nombres.ts
+var ESPACES = /[\s\u202f\u00a0]/g;
+function lireNombre(saisie) {
+  const brut = saisie.replace(ESPACES, "");
+  if (brut === "") return { ok: true, valeur: null };
+  if (brut.startsWith("-")) return { ok: false, motif: "negatif" };
+  const normalise = brut.replace(",", ".");
+  if (!/^\d+(\.\d+)?$/.test(normalise)) return { ok: false, motif: "illisible" };
+  const n = Number(normalise);
+  if (!Number.isFinite(n)) return { ok: false, motif: "illisible" };
+  return { ok: true, valeur: n };
+}
+function convertirSaisie(saisie, de, vers, conv) {
+  if (de === vers) return saisie;
+  const lecture = lireNombre(saisie);
+  if (!lecture.ok || lecture.valeur == null || lecture.valeur <= 0) return saisie;
+  const converti = conv.convertir(lecture.valeur, de, vers);
+  if (!Number.isFinite(converti)) return saisie;
+  const texte = converti.toFixed(Math.max(0, Math.min(20, conv.decimales(vers))));
+  return texte.includes(".") ? texte.replace(/\.?0+$/, "") : texte;
+}
+function montrerConversion(saisie, devise, principale, nombreDeDevises) {
+  if (nombreDeDevises <= 1 || devise === principale) return false;
+  const lecture = lireNombre(saisie);
+  return lecture.ok && lecture.valeur != null && lecture.valeur > 0;
+}
+
+// src/journee.ts
+var CHOIX_JOURNEE_VIDE = { entrepot: null, utilisateur: null };
+var AUCUN_CHAMP = { entrepot: false, utilisateur: false, tousLesEntrepots: false };
+function champsDeLaJournee(m) {
+  if (m.role === null || m.role === "cashier") return AUCUN_CHAMP;
+  const tous = litTousLesEntrepots(m);
+  if (!tous && m.affectes.length === 0) return AUCUN_CHAMP;
+  return { entrepot: true, utilisateur: true, tousLesEntrepots: tous };
+}
+function afficheFiltresDeLaJournee(m) {
+  const c = champsDeLaJournee(m);
+  return c.entrepot || c.utilisateur;
+}
+var PORTEE_MOI = { kind: "moi" };
+function porteeDeLaJournee(m, choix) {
+  const champs = champsDeLaJournee(m);
+  if (!champs.entrepot && !champs.utilisateur) return PORTEE_MOI;
+  const permis = new Set(m.affectes.map((e) => e.id));
+  const entrepot = champs.entrepot ? choixEntrepotRecevable(choix.entrepot, permis, champs.tousLesEntrepots) : null;
+  const utilisateur = champs.utilisateur ? choix.utilisateur : null;
+  if (utilisateur && utilisateur !== CHOIX_TOUS) {
+    return { kind: "membre", utilisateur, entrepot };
+  }
+  if (utilisateur === CHOIX_TOUS || entrepot) {
+    return { kind: "equipe", entrepot };
+  }
+  return PORTEE_MOI;
+}
+function parametresDeLaJournee(p, moi) {
+  const entrepot = (e) => e === CHOIX_TOUS ? { all_warehouses: "1" } : e ? { warehouse: e } : {};
+  switch (p.kind) {
+    case "moi":
+      return { user: moi };
+    case "membre":
+      return { user: p.utilisateur, ...entrepot(p.entrepot) };
+    case "equipe":
+      return p.entrepot ? entrepot(p.entrepot) : { all_users: "1" };
+  }
+}
+function libelleEntrepotVide(m) {
+  return libelleDefautEntrepot(m);
+}
+function libelleUtilisateurVide(choix) {
+  return choix.entrepot ? LIBELLE_TOUTE_L_EQUIPE : "Moi uniquement";
+}
+var LIBELLE_TOUTE_L_EQUIPE = "Toute l'\xE9quipe";
+function proposeTouteLEquipe(choix) {
+  return !choix.entrepot;
+}
+function proposeSoiMeme(choix) {
+  return Boolean(choix.entrepot);
+}
+function libelleDeLaPortee(p, noms) {
+  const nomEntrepot = (e) => {
+    if (e === CHOIX_TOUS) return "Tous les entrep\xF4ts";
+    if (!e) return null;
+    return noms.entrepot(e) ?? "Entrep\xF4t";
+  };
+  switch (p.kind) {
+    case "moi":
+      return "Mes op\xE9rations";
+    case "membre": {
+      const qui = noms.utilisateur(p.utilisateur) ?? "Membre de l'\xE9quipe";
+      const ou = nomEntrepot(p.entrepot);
+      return ou ? `${qui} \xB7 ${ou}` : qui;
+    }
+    case "equipe": {
+      if (p.entrepot === CHOIX_TOUS || !p.entrepot && noms.role === "owner") {
+        return "Tout l'\xE9tablissement";
+      }
+      const ou = nomEntrepot(p.entrepot);
+      return ou ? `${ou} \xB7 toute l'\xE9quipe` : "Toute l'\xE9quipe de mes entrep\xF4ts";
+    }
+  }
+}
+
 // src/receipt/index.ts
 var receipt_exports = {};
 __export(receipt_exports, {
   DOCUMENT_IDENTITIES: () => DOCUMENT_IDENTITIES,
   DUPLICATE_CHIP: () => DUPLICATE_CHIP,
   FONTS: () => FONTS,
+  LIGNES_MAX_RAPPORT: () => LIGNES_MAX_RAPPORT,
   buildCashSessionReceipt: () => buildCashSessionReceipt,
+  buildDayReport: () => buildDayReport,
   buildExpenseReceipt: () => buildExpenseReceipt,
   buildExpenseRequest: () => buildExpenseRequest,
   buildPaymentReceipt: () => buildPaymentReceipt,
@@ -991,6 +1134,16 @@ var DOCUMENT_IDENTITIES = {
     sub: "Ne vaut pas justificatif de sortie de caisse",
     prefix: "DEP",
     numberLabel: "Demande n\xB0"
+  },
+  /**
+   * Lecture de contrôle de la journée : ni numéro, ni valeur probante. Le
+   * terminal ne la range pas, elle se régénère depuis l'écran.
+   */
+  day_report: {
+    band: "RAPPORT DE LA JOURN\xC9E",
+    sub: "Lecture de contr\xF4le, ne cl\xF4ture aucune caisse",
+    prefix: "",
+    numberLabel: ""
   }
 };
 var DUPLICATE_CHIP = "DUPLICATA";
@@ -1459,6 +1612,92 @@ function buildExpenseRequest(data) {
   ]);
 }
 
+// src/receipt/documents/day-report.ts
+var LIGNES_MAX_RAPPORT = 60;
+function buildDayReport(data) {
+  const money = (amount, currency) => formatMoney(amount, currency, data.currencyOverrides);
+  const principal = (amount) => money(amount, data.currency);
+  const info = compact([
+    { label: "Journ\xE9e", value: data.day, strong: true },
+    { label: "Arr\xEAt\xE9 \xE0", value: data.closedAt },
+    { label: "Port\xE9e", value: data.scope },
+    data.printedBy && { label: "Imprim\xE9 par", value: data.printedBy }
+  ]);
+  const ventes = compact([
+    { label: "Ventes", value: String(data.sales.count) },
+    { label: "Factur\xE9", value: principal(data.sales.total), strong: true },
+    data.sales.onCredit > 5e-3 && {
+      label: "dont \xE0 cr\xE9dit",
+      value: principal(data.sales.onCredit)
+    }
+  ]);
+  const caisse = [
+    {
+      label: `D\xE9penses (${data.expenses.count})`,
+      value: principal(data.expenses.total)
+    },
+    { label: "Entr\xE9es de caisse", value: principal(data.cash.cashIn) },
+    { label: "Sorties de caisse", value: principal(data.cash.cashOut) },
+    { label: "Solde net de caisse", value: principal(data.cash.net), strong: true }
+  ];
+  const lignes = data.lines ?? null;
+  const visibles = lignes ? lignes.slice(-LIGNES_MAX_RAPPORT) : [];
+  const omises = lignes ? lignes.length - visibles.length : 0;
+  return compact([
+    ...orgHeaderBlocks(data.chrome),
+    ...identityBlocks({ kind: "day_report", number: "", date: data.day }),
+    { kind: "kv", rows: info, mode: "inline", role: "body" },
+    { kind: "space", size: "xs" },
+    { kind: "rule", weight: "light" },
+    { kind: "space", size: "sm" },
+    { kind: "amounts", rows: ventes, role: "body" },
+    { kind: "space", size: "sm" },
+    { kind: "text", text: "Encaiss\xE9 par moyen", role: "label", align: "left" },
+    data.payments.length > 0 ? {
+      kind: "amounts",
+      rows: data.payments.map((p) => ({ label: p.method, value: principal(p.total) })),
+      role: "body"
+    } : { kind: "text", text: "Aucun encaissement", role: "body", align: "left" },
+    { kind: "space", size: "sm" },
+    { kind: "rule", weight: "light" },
+    { kind: "amounts", rows: caisse, role: "body" },
+    data.stock && { kind: "space", size: "sm" },
+    data.stock && { kind: "rule", weight: "light" },
+    data.stock && { kind: "text", text: "Mouvements de stock", role: "label", align: "left" },
+    data.stock && (data.stock.length > 0 ? {
+      kind: "amounts",
+      rows: data.stock.map((s) => ({ label: s.label, value: String(s.count) })),
+      role: "body"
+    } : { kind: "text", text: "Aucun mouvement", role: "body", align: "left" }),
+    lignes && { kind: "space", size: "sm" },
+    lignes && { kind: "rule", weight: "light" },
+    lignes && {
+      kind: "text",
+      text: `Ventes de la journ\xE9e (${lignes.length})`,
+      role: "label",
+      align: "left"
+    },
+    lignes && omises > 0 && {
+      kind: "text",
+      text: `${omises} vente${omises > 1 ? "s" : ""} plus ancienne${omises > 1 ? "s" : ""} : liste compl\xE8te dans le document A4.`,
+      role: "legal",
+      align: "left"
+    },
+    lignes && (visibles.length > 0 ? {
+      kind: "amounts",
+      rows: visibles.map((l) => ({
+        label: `${l.time} ${l.reference}${l.note ? ` (${l.note})` : ""}`,
+        value: money(l.amount, l.currency)
+      })),
+      role: "body"
+    } : { kind: "text", text: "Aucune vente", role: "body", align: "left" }),
+    ...footerBlocks({ org: data.chrome.org }, [
+      "Lecture de contr\xF4le de la journ\xE9e.",
+      "Ne cl\xF4ture aucune caisse."
+    ])
+  ]);
+}
+
 // src/pos/index.ts
 var pos_exports = {};
 __export(pos_exports, {
@@ -1474,38 +1713,54 @@ __export(pos_exports, {
   basculerCanal: () => basculerCanal,
   basketTotals: () => basketTotals,
   buildSalePayload: () => buildSalePayload,
+  cagnotteVersPrincipale: () => cagnotteVersPrincipale,
   canalParDefaut: () => canalParDefaut,
   candidatsDuScan: () => candidatsDuScan,
   createCurrencyTable: () => createCurrencyTable,
+  deviseEquivalente: () => deviseEquivalente,
+  deviseNonActive: () => deviseNonActive,
+  devisesAffichables: () => devisesAffichables,
   estLeMemeArticle: () => estLeMemeArticle,
+  etatDeLaCarte: () => etatDeLaCarte,
   evaluateCredit: () => evaluateCredit,
   frapper: () => frapper,
   frapperDansLaSaisie: () => frapperDansLaSaisie,
   inCart: () => inCart,
+  libelleDuBandeau: () => libelleDuBandeau,
+  libelleDuTaux: () => libelleDuTaux,
+  lieuDeLArticle: () => lieuDeLArticle,
   lignesEnRupture: () => lignesEnRupture,
   lineGross: () => lineGross,
   looseQuantityOf: () => looseQuantityOf,
   loyaltyDiscount: () => loyaltyDiscount,
   loyaltyEarned: () => loyaltyEarned,
+  manqueAffiche: () => manqueAffiche,
   maxGlobalDiscount: () => maxGlobalDiscount,
   maxLoyaltyAmount: () => maxLoyaltyAmount,
   maxUsableCredit: () => maxUsableCredit,
   monnaieARendre: () => monnaieARendre,
+  montantApresBasculeDevise: () => montantApresBasculeDevise,
+  montantExigible: () => montantExigible,
   motifDuVerrou: () => motifDuVerrou,
   motifStockInconnu: () => motifStockInconnu,
   motifsEncaissement: () => motifsEncaissement,
   packagingFactorOf: () => packagingFactorOf,
   panierServable: () => panierServable,
+  prixAvecEquivalent: () => prixAvecEquivalent,
   quantiteApresRescan: () => quantiteApresRescan,
   quantiteInitiale: () => quantiteInitiale,
   r2: () => r2,
+  recalerReglement: () => recalerReglement,
+  recapitulatifAffiche: () => recapitulatifAffiche,
   rescanAuRepos: () => rescanAuRepos,
   saisieDeQuantite: () => saisieDeQuantite,
   saleCurrencyTotals: () => saleCurrencyTotals,
   tendersIn: () => tendersIn,
   totalInSaleCurrency: () => totalInSaleCurrency,
   totauxParDevise: () => totauxParDevise,
-  verifierAjout: () => verifierAjout
+  verifierAjout: () => verifierAjout,
+  versActive: () => versActive,
+  versActiveSansDepasser: () => versActiveSansDepasser
 });
 
 // src/pos/basket.ts
@@ -2008,19 +2263,181 @@ function quantiteApresRescan(valeur) {
   const base = Number.isFinite(valeur) && valeur > 0 ? valeur : 0;
   return roundQuantity(base + 1);
 }
+
+// src/pos/affichage-devise.ts
+function devisesAffichables(money) {
+  const autres = money.currencies.map((c) => c.currency_code).filter((c) => c && c !== money.primaryCode);
+  return [money.primaryCode, ...[...new Set(autres)].sort()];
+}
+function deviseEquivalente(money) {
+  const actives = new Set(
+    money.currencies.filter((c) => c.is_active !== false).map((c) => c.currency_code)
+  );
+  return devisesAffichables(money).find((c) => c !== money.primaryCode && actives.has(c)) ?? null;
+}
+function prixAvecEquivalent(prix, money) {
+  const facture = money.money(prix, money.primaryCode);
+  const cible = deviseEquivalente(money);
+  if (!cible) return { facture, equivalent: null };
+  return {
+    facture,
+    equivalent: money.money(money.convMoney(prix, money.primaryCode, cible), cible)
+  };
+}
+
+// src/pos/carte.ts
+var SEUIL_PAR_DEFAUT = 5;
+function etatDeLaCarte(article, auPanier = 0) {
+  if (article.verrou_inventaire !== null) return "verrouille";
+  if (!article.track_inventory) return "non_suivi";
+  if (article.stock_quantity === null) return "aucun";
+  const restant = roundQuantity(article.stock_quantity - auPanier);
+  if (restant <= 0) return "epuise";
+  const seuil = parseFloat(article.reorder_point ?? "") || SEUIL_PAR_DEFAUT;
+  return restant <= seuil ? "bas" : "ok";
+}
+function symboleUtile(symbole, nom) {
+  const s = symbole?.trim();
+  if (!s) return null;
+  return nom.trim().toLowerCase().startsWith(s.toLowerCase()) ? null : s;
+}
+function quantite(n, symbole, mot, court) {
+  const abrege = court ? symboleUtile(symbole, mot) : null;
+  return abrege ? `${formatQuantity(n)} ${abrege}` : formatUnitQuantity(n, mot);
+}
+function libelleDuBandeau(article, court = false) {
+  if (!article.track_inventory) return "Non suivi";
+  if (article.stock_quantity === null) return "Aucun stock";
+  const conditionnement = getPackaging(article);
+  const scelles = article.stock_packages;
+  const detail = article.stock_loose;
+  if (conditionnement && scelles !== null && detail !== null) {
+    const parts = [];
+    if (scelles > 0) {
+      parts.push(quantite(scelles, article.packaging_unit_symbol, conditionnement.packageWord, court));
+    }
+    if (detail > 0) {
+      parts.push(quantite(detail, article.unit_symbol, conditionnement.retailWord, court));
+    }
+    return parts.length > 0 ? parts.join(" + ") : "\xC9puis\xE9";
+  }
+  if (article.stock_quantity <= 0) return "\xC9puis\xE9";
+  return quantite(article.stock_quantity, article.unit_symbol, article.unit_name || "unit\xE9", court);
+}
+function lieuDeLArticle(article, entrepot) {
+  if (article.stock_quantity === null) return "-";
+  const emplacements = article.emplacement?.split(",").map((e) => e.trim()).filter(Boolean) ?? [];
+  const parts = [...emplacements, entrepot?.trim()].filter(Boolean);
+  return parts.length > 0 ? parts.join(" \xB7 ") : "-";
+}
+
+// src/pos/encaissement-affichage.ts
+function montantExigible(e) {
+  const converti = e.convertirBrut(
+    e.totalFacture,
+    e.deviseFacture,
+    e.deviseReglement
+  );
+  const facteur = Math.pow(10, e.decimalesDe(e.deviseReglement));
+  const produit = converti * facteur;
+  const entier = Math.round(produit);
+  return (Math.abs(produit - entier) < MONEY_EPS ? entier : Math.ceil(produit)) / facteur;
+}
+function recalerReglement(e) {
+  if (e.mode === "credit") return null;
+  return String(montantExigible(e));
+}
+function montantApresBasculeDevise(e) {
+  const converti = convertirSaisie(e.saisie, e.deviseAvant, e.deviseReglement, {
+    convertir: e.convertirArrondi,
+    decimales: e.decimalesDe
+  });
+  if (e.mode === "credit") return converti;
+  const solde = (montant, devise) => {
+    const lu = lireNombre(montant);
+    if (!lu.ok || lu.valeur == null) return false;
+    return e.convertirArrondi(lu.valeur, devise, e.deviseFacture) + MONEY_EPS >= e.totalFacture;
+  };
+  if (!solde(e.saisie, e.deviseAvant)) return converti;
+  if (solde(converti, e.deviseReglement)) return converti;
+  return String(montantExigible(e));
+}
+function deviseNonActive(active, devisesActives) {
+  const distinctes = [...new Set(devisesActives)];
+  if (distinctes.length !== 2 || !distinctes.includes(active)) return null;
+  return distinctes.find((c) => c !== active) ?? null;
+}
+function versActive(montant, depuis, a) {
+  return depuis === a.deviseActive ? montant : a.convertirArrondi(montant, depuis, a.deviseActive);
+}
+function versActiveSansDepasser(montant, depuis, a) {
+  if (depuis === a.deviseActive) return montant;
+  const facteur = Math.pow(10, a.decimalesDe(a.deviseActive));
+  const produit = a.convertirBrut(montant, depuis, a.deviseActive) * facteur;
+  const tolerance = Math.max(MONEY_EPS, Math.abs(produit) * 1e-8);
+  const plancher = Math.floor(produit);
+  return (produit - plancher > 1 - tolerance ? plancher + 1 : plancher) / facteur;
+}
+function recapitulatifAffiche(e) {
+  const ligne = (m) => versActive(m, e.deviseFacture, e);
+  const autre = deviseNonActive(e.deviseActive, e.devisesActives);
+  return {
+    devise: e.deviseActive,
+    sousTotal: ligne(e.facture.subtotal),
+    remisesArticles: ligne(e.facture.itemDiscount),
+    remise: ligne(e.facture.globalDiscount),
+    cagnotte: ligne(e.facture.loyaltyDiscount),
+    taxe: ligne(e.facture.tax),
+    total: montantExigible({
+      totalFacture: e.totalFacture,
+      deviseFacture: e.deviseFacture,
+      deviseReglement: e.deviseActive,
+      convertirBrut: e.convertirBrut,
+      decimalesDe: e.decimalesDe
+    }),
+    equivalent: autre ? {
+      // L'autre devise est la FACTURE : c'est son total exact qu'on écrit,
+      // pas une conversion aller-retour.
+      montant: autre === e.deviseFacture ? e.totalFacture : e.convertirArrondi(e.totalFacture, e.deviseFacture, autre),
+      devise: autre
+    } : null,
+    convertie: e.deviseActive !== e.deviseFacture
+  };
+}
+function manqueAffiche(manque, a) {
+  if (manque <= 0) return 0;
+  return montantExigible({
+    totalFacture: manque,
+    deviseFacture: a.deviseFacture,
+    deviseReglement: a.deviseActive,
+    convertirBrut: a.convertirBrut,
+    decimalesDe: a.decimalesDe
+  });
+}
+function cagnotteVersPrincipale(e) {
+  const enPrincipale = e.deviseActive === e.principale ? e.saisie : e.arrondir(e.convertirBrut(e.saisie, e.deviseActive, e.principale), e.principale);
+  return Math.max(0, Math.min(enPrincipale, e.plafond));
+}
+function libelleDuTaux(deviseRecue, deviseFacture, convertirArrondi, argent) {
+  const [forte, faible] = convertirArrondi(1, deviseRecue, deviseFacture) >= 1 ? [deviseRecue, deviseFacture] : [deviseFacture, deviseRecue];
+  return `1 ${forte} = ${argent(convertirArrondi(1, forte, faible), faible)}`;
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
+  CHOIX_JOURNEE_VIDE,
   CHOIX_TOUS,
   DEFAULT_COUNTRY,
   LIBELLES_CASES_PERIMETRE,
   LIBELLES_VERROU_PERIMETRE,
   LIBELLE_TOUS_ENTREPOTS,
   LIBELLE_TOUS_UTILISATEURS,
+  LIBELLE_TOUTE_L_EQUIPE,
   MAX_QUANTITY,
   MIN_QUANTITY,
   MONEY_EPS,
   NNBSP,
   PERMISSION_VOIR_TOUT,
+  PORTEE_MOI,
   QUANTITY_DECIMALS,
   QUANTITY_INTEGER_DIGITS,
   ROLE_HIERARCHY,
@@ -2029,6 +2446,7 @@ function quantiteApresRescan(valeur) {
   SUPPORTED_CURRENCIES,
   afficheFiltreEntrepot,
   afficheFiltreUtilisateur,
+  afficheFiltresDeLaJournee,
   afficheFiltresPerimetre,
   availableBase,
   availableSplit,
@@ -2036,8 +2454,11 @@ function quantiteApresRescan(valeur) {
   canManageRole,
   caseConsulterTousUtile,
   caseVoirToutUtile,
+  casseDeTitre,
+  champsDeLaJournee,
   choixEntrepotRecevable,
   computeMargin,
+  convertirSaisie,
   createCurrencyTable,
   createMoneyHelpers,
   daysLate,
@@ -2076,18 +2497,27 @@ function quantiteApresRescan(valeur) {
   isAtLeastRole,
   isOverdue,
   isRole,
+  libelleDeLaPortee,
   libelleDefautEntrepot,
   libelleDefautUtilisateur,
+  libelleEntrepotVide,
+  libelleUtilisateurVide,
+  lireNombre,
   litTousLesEntrepots,
   membreDepuisPermissions,
   monthLong,
   monthShort,
+  montrerConversion,
   packageEquivalent,
+  parametresDeLaJournee,
   parametresDuChoix,
   pluralizeUnit,
+  porteeDeLaJournee,
   pos,
+  proposeSoiMeme,
   proposeTousLesEntrepots,
   proposeTousLesUtilisateurs,
+  proposeTouteLEquipe,
   r2,
   receipt,
   remainingChannels,

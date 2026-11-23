@@ -22,6 +22,9 @@ export * from "./pricing";
 export * from "./permissions";
 export * from "./perimetre";
 export * from "./due-date";
+export * from "./casse";
+export * from "./nombres";
+export * from "./journee";
 
 export * as receipt from "./receipt/index";
 

@@ -32,38 +32,54 @@ __export(pos_exports, {
   basculerCanal: () => basculerCanal,
   basketTotals: () => basketTotals,
   buildSalePayload: () => buildSalePayload,
+  cagnotteVersPrincipale: () => cagnotteVersPrincipale,
   canalParDefaut: () => canalParDefaut,
   candidatsDuScan: () => candidatsDuScan,
   createCurrencyTable: () => createCurrencyTable,
+  deviseEquivalente: () => deviseEquivalente,
+  deviseNonActive: () => deviseNonActive,
+  devisesAffichables: () => devisesAffichables,
   estLeMemeArticle: () => estLeMemeArticle,
+  etatDeLaCarte: () => etatDeLaCarte,
   evaluateCredit: () => evaluateCredit,
   frapper: () => frapper,
   frapperDansLaSaisie: () => frapperDansLaSaisie,
   inCart: () => inCart,
+  libelleDuBandeau: () => libelleDuBandeau,
+  libelleDuTaux: () => libelleDuTaux,
+  lieuDeLArticle: () => lieuDeLArticle,
   lignesEnRupture: () => lignesEnRupture,
   lineGross: () => lineGross,
   looseQuantityOf: () => looseQuantityOf,
   loyaltyDiscount: () => loyaltyDiscount,
   loyaltyEarned: () => loyaltyEarned,
+  manqueAffiche: () => manqueAffiche,
   maxGlobalDiscount: () => maxGlobalDiscount,
   maxLoyaltyAmount: () => maxLoyaltyAmount,
   maxUsableCredit: () => maxUsableCredit,
   monnaieARendre: () => monnaieARendre,
+  montantApresBasculeDevise: () => montantApresBasculeDevise,
+  montantExigible: () => montantExigible,
   motifDuVerrou: () => motifDuVerrou,
   motifStockInconnu: () => motifStockInconnu,
   motifsEncaissement: () => motifsEncaissement,
   packagingFactorOf: () => packagingFactorOf,
   panierServable: () => panierServable,
+  prixAvecEquivalent: () => prixAvecEquivalent,
   quantiteApresRescan: () => quantiteApresRescan,
   quantiteInitiale: () => quantiteInitiale,
   r2: () => r2,
+  recalerReglement: () => recalerReglement,
+  recapitulatifAffiche: () => recapitulatifAffiche,
   rescanAuRepos: () => rescanAuRepos,
   saisieDeQuantite: () => saisieDeQuantite,
   saleCurrencyTotals: () => saleCurrencyTotals,
   tendersIn: () => tendersIn,
   totalInSaleCurrency: () => totalInSaleCurrency,
   totauxParDevise: () => totauxParDevise,
-  verifierAjout: () => verifierAjout
+  verifierAjout: () => verifierAjout,
+  versActive: () => versActive,
+  versActiveSansDepasser: () => versActiveSansDepasser
 });
 module.exports = __toCommonJS(pos_exports);
 
@@ -125,6 +141,51 @@ function createCurrencyTable(currencies, fallback) {
   };
 }
 
+// src/units.ts
+var SYMBOLES_INVARIABLES = /* @__PURE__ */ new Set([
+  // Masse
+  "g",
+  "kg",
+  "mg",
+  "t",
+  "q",
+  "lb",
+  // Volume
+  "l",
+  "ml",
+  "cl",
+  "dl",
+  "hl",
+  "m3",
+  "cm3",
+  "dm3",
+  // Longueur
+  "m",
+  "mm",
+  "cm",
+  "dm",
+  "km",
+  // Surface et volume bâti
+  "m2",
+  "cm2",
+  "ha",
+  // Durée. « s » et « h » le sont déjà par la règle finale, on les nomme
+  // quand même : la liste doit se lire comme un inventaire, pas comme un reste.
+  "s",
+  "min",
+  "h",
+  "j"
+]);
+function pluralizeUnit(word, count) {
+  const mot = (word || "").trim();
+  if (!mot) return "";
+  if (Math.abs(count) < 2) return mot;
+  if (/[sxz]$/i.test(mot)) return mot;
+  if (SYMBOLES_INVARIABLES.has(mot.toLowerCase())) return mot;
+  const enCapitales = mot === mot.toUpperCase() && /[A-ZÀ-Ÿ]/.test(mot);
+  return `${mot}${enCapitales ? "S" : "s"}`;
+}
+
 // src/packaging.ts
 var QUANTITY_DECIMALS = 3;
 var QUANTITY_INTEGER_DIGITS = 12;
@@ -137,6 +198,9 @@ function roundQuantity(n) {
 }
 function formatQuantity(n) {
   return formatNumberFr(n, QUANTITY_DECIMALS);
+}
+function formatUnitQuantity(count, word) {
+  return `${formatQuantity(count)} ${pluralizeUnit(word, count)}`.trim();
 }
 function getPackaging(product) {
   if (!product) return null;
@@ -677,6 +741,187 @@ function quantiteApresRescan(valeur) {
   const base = Number.isFinite(valeur) && valeur > 0 ? valeur : 0;
   return roundQuantity(base + 1);
 }
+
+// src/pos/affichage-devise.ts
+function devisesAffichables(money) {
+  const autres = money.currencies.map((c) => c.currency_code).filter((c) => c && c !== money.primaryCode);
+  return [money.primaryCode, ...[...new Set(autres)].sort()];
+}
+function deviseEquivalente(money) {
+  const actives = new Set(
+    money.currencies.filter((c) => c.is_active !== false).map((c) => c.currency_code)
+  );
+  return devisesAffichables(money).find((c) => c !== money.primaryCode && actives.has(c)) ?? null;
+}
+function prixAvecEquivalent(prix, money) {
+  const facture = money.money(prix, money.primaryCode);
+  const cible = deviseEquivalente(money);
+  if (!cible) return { facture, equivalent: null };
+  return {
+    facture,
+    equivalent: money.money(money.convMoney(prix, money.primaryCode, cible), cible)
+  };
+}
+
+// src/pos/carte.ts
+var SEUIL_PAR_DEFAUT = 5;
+function etatDeLaCarte(article, auPanier = 0) {
+  if (article.verrou_inventaire !== null) return "verrouille";
+  if (!article.track_inventory) return "non_suivi";
+  if (article.stock_quantity === null) return "aucun";
+  const restant = roundQuantity(article.stock_quantity - auPanier);
+  if (restant <= 0) return "epuise";
+  const seuil = parseFloat(article.reorder_point ?? "") || SEUIL_PAR_DEFAUT;
+  return restant <= seuil ? "bas" : "ok";
+}
+function symboleUtile(symbole, nom) {
+  const s = symbole?.trim();
+  if (!s) return null;
+  return nom.trim().toLowerCase().startsWith(s.toLowerCase()) ? null : s;
+}
+function quantite(n, symbole, mot, court) {
+  const abrege = court ? symboleUtile(symbole, mot) : null;
+  return abrege ? `${formatQuantity(n)} ${abrege}` : formatUnitQuantity(n, mot);
+}
+function libelleDuBandeau(article, court = false) {
+  if (!article.track_inventory) return "Non suivi";
+  if (article.stock_quantity === null) return "Aucun stock";
+  const conditionnement = getPackaging(article);
+  const scelles = article.stock_packages;
+  const detail = article.stock_loose;
+  if (conditionnement && scelles !== null && detail !== null) {
+    const parts = [];
+    if (scelles > 0) {
+      parts.push(quantite(scelles, article.packaging_unit_symbol, conditionnement.packageWord, court));
+    }
+    if (detail > 0) {
+      parts.push(quantite(detail, article.unit_symbol, conditionnement.retailWord, court));
+    }
+    return parts.length > 0 ? parts.join(" + ") : "\xC9puis\xE9";
+  }
+  if (article.stock_quantity <= 0) return "\xC9puis\xE9";
+  return quantite(article.stock_quantity, article.unit_symbol, article.unit_name || "unit\xE9", court);
+}
+function lieuDeLArticle(article, entrepot) {
+  if (article.stock_quantity === null) return "-";
+  const emplacements = article.emplacement?.split(",").map((e) => e.trim()).filter(Boolean) ?? [];
+  const parts = [...emplacements, entrepot?.trim()].filter(Boolean);
+  return parts.length > 0 ? parts.join(" \xB7 ") : "-";
+}
+
+// src/nombres.ts
+var ESPACES = /[\s\u202f\u00a0]/g;
+function lireNombre(saisie) {
+  const brut = saisie.replace(ESPACES, "");
+  if (brut === "") return { ok: true, valeur: null };
+  if (brut.startsWith("-")) return { ok: false, motif: "negatif" };
+  const normalise = brut.replace(",", ".");
+  if (!/^\d+(\.\d+)?$/.test(normalise)) return { ok: false, motif: "illisible" };
+  const n = Number(normalise);
+  if (!Number.isFinite(n)) return { ok: false, motif: "illisible" };
+  return { ok: true, valeur: n };
+}
+function convertirSaisie(saisie, de, vers, conv) {
+  if (de === vers) return saisie;
+  const lecture = lireNombre(saisie);
+  if (!lecture.ok || lecture.valeur == null || lecture.valeur <= 0) return saisie;
+  const converti = conv.convertir(lecture.valeur, de, vers);
+  if (!Number.isFinite(converti)) return saisie;
+  const texte = converti.toFixed(Math.max(0, Math.min(20, conv.decimales(vers))));
+  return texte.includes(".") ? texte.replace(/\.?0+$/, "") : texte;
+}
+
+// src/pos/encaissement-affichage.ts
+function montantExigible(e) {
+  const converti = e.convertirBrut(
+    e.totalFacture,
+    e.deviseFacture,
+    e.deviseReglement
+  );
+  const facteur = Math.pow(10, e.decimalesDe(e.deviseReglement));
+  const produit = converti * facteur;
+  const entier = Math.round(produit);
+  return (Math.abs(produit - entier) < MONEY_EPS ? entier : Math.ceil(produit)) / facteur;
+}
+function recalerReglement(e) {
+  if (e.mode === "credit") return null;
+  return String(montantExigible(e));
+}
+function montantApresBasculeDevise(e) {
+  const converti = convertirSaisie(e.saisie, e.deviseAvant, e.deviseReglement, {
+    convertir: e.convertirArrondi,
+    decimales: e.decimalesDe
+  });
+  if (e.mode === "credit") return converti;
+  const solde = (montant, devise) => {
+    const lu = lireNombre(montant);
+    if (!lu.ok || lu.valeur == null) return false;
+    return e.convertirArrondi(lu.valeur, devise, e.deviseFacture) + MONEY_EPS >= e.totalFacture;
+  };
+  if (!solde(e.saisie, e.deviseAvant)) return converti;
+  if (solde(converti, e.deviseReglement)) return converti;
+  return String(montantExigible(e));
+}
+function deviseNonActive(active, devisesActives) {
+  const distinctes = [...new Set(devisesActives)];
+  if (distinctes.length !== 2 || !distinctes.includes(active)) return null;
+  return distinctes.find((c) => c !== active) ?? null;
+}
+function versActive(montant, depuis, a) {
+  return depuis === a.deviseActive ? montant : a.convertirArrondi(montant, depuis, a.deviseActive);
+}
+function versActiveSansDepasser(montant, depuis, a) {
+  if (depuis === a.deviseActive) return montant;
+  const facteur = Math.pow(10, a.decimalesDe(a.deviseActive));
+  const produit = a.convertirBrut(montant, depuis, a.deviseActive) * facteur;
+  const tolerance = Math.max(MONEY_EPS, Math.abs(produit) * 1e-8);
+  const plancher = Math.floor(produit);
+  return (produit - plancher > 1 - tolerance ? plancher + 1 : plancher) / facteur;
+}
+function recapitulatifAffiche(e) {
+  const ligne = (m) => versActive(m, e.deviseFacture, e);
+  const autre = deviseNonActive(e.deviseActive, e.devisesActives);
+  return {
+    devise: e.deviseActive,
+    sousTotal: ligne(e.facture.subtotal),
+    remisesArticles: ligne(e.facture.itemDiscount),
+    remise: ligne(e.facture.globalDiscount),
+    cagnotte: ligne(e.facture.loyaltyDiscount),
+    taxe: ligne(e.facture.tax),
+    total: montantExigible({
+      totalFacture: e.totalFacture,
+      deviseFacture: e.deviseFacture,
+      deviseReglement: e.deviseActive,
+      convertirBrut: e.convertirBrut,
+      decimalesDe: e.decimalesDe
+    }),
+    equivalent: autre ? {
+      // L'autre devise est la FACTURE : c'est son total exact qu'on écrit,
+      // pas une conversion aller-retour.
+      montant: autre === e.deviseFacture ? e.totalFacture : e.convertirArrondi(e.totalFacture, e.deviseFacture, autre),
+      devise: autre
+    } : null,
+    convertie: e.deviseActive !== e.deviseFacture
+  };
+}
+function manqueAffiche(manque, a) {
+  if (manque <= 0) return 0;
+  return montantExigible({
+    totalFacture: manque,
+    deviseFacture: a.deviseFacture,
+    deviseReglement: a.deviseActive,
+    convertirBrut: a.convertirBrut,
+    decimalesDe: a.decimalesDe
+  });
+}
+function cagnotteVersPrincipale(e) {
+  const enPrincipale = e.deviseActive === e.principale ? e.saisie : e.arrondir(e.convertirBrut(e.saisie, e.deviseActive, e.principale), e.principale);
+  return Math.max(0, Math.min(enPrincipale, e.plafond));
+}
+function libelleDuTaux(deviseRecue, deviseFacture, convertirArrondi, argent) {
+  const [forte, faible] = convertirArrondi(1, deviseRecue, deviseFacture) >= 1 ? [deviseRecue, deviseFacture] : [deviseFacture, deviseRecue];
+  return `1 ${forte} = ${argent(convertirArrondi(1, forte, faible), faible)}`;
+}
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   DOUCHETTE_AU_REPOS,
@@ -691,37 +936,53 @@ function quantiteApresRescan(valeur) {
   basculerCanal,
   basketTotals,
   buildSalePayload,
+  cagnotteVersPrincipale,
   canalParDefaut,
   candidatsDuScan,
   createCurrencyTable,
+  deviseEquivalente,
+  deviseNonActive,
+  devisesAffichables,
   estLeMemeArticle,
+  etatDeLaCarte,
   evaluateCredit,
   frapper,
   frapperDansLaSaisie,
   inCart,
+  libelleDuBandeau,
+  libelleDuTaux,
+  lieuDeLArticle,
   lignesEnRupture,
   lineGross,
   looseQuantityOf,
   loyaltyDiscount,
   loyaltyEarned,
+  manqueAffiche,
   maxGlobalDiscount,
   maxLoyaltyAmount,
   maxUsableCredit,
   monnaieARendre,
+  montantApresBasculeDevise,
+  montantExigible,
   motifDuVerrou,
   motifStockInconnu,
   motifsEncaissement,
   packagingFactorOf,
   panierServable,
+  prixAvecEquivalent,
   quantiteApresRescan,
   quantiteInitiale,
   r2,
+  recalerReglement,
+  recapitulatifAffiche,
   rescanAuRepos,
   saisieDeQuantite,
   saleCurrencyTotals,
   tendersIn,
   totalInSaleCurrency,
   totauxParDevise,
-  verifierAjout
+  verifierAjout,
+  versActive,
+  versActiveSansDepasser
 });
 //# sourceMappingURL=index.cjs.map

@@ -11,7 +11,9 @@ __export(receipt_exports, {
   DOCUMENT_IDENTITIES: () => DOCUMENT_IDENTITIES,
   DUPLICATE_CHIP: () => DUPLICATE_CHIP,
   FONTS: () => FONTS,
+  LIGNES_MAX_RAPPORT: () => LIGNES_MAX_RAPPORT,
   buildCashSessionReceipt: () => buildCashSessionReceipt,
+  buildDayReport: () => buildDayReport,
   buildExpenseReceipt: () => buildExpenseReceipt,
   buildExpenseRequest: () => buildExpenseRequest,
   buildPaymentReceipt: () => buildPaymentReceipt,
@@ -262,6 +264,16 @@ var DOCUMENT_IDENTITIES = {
     sub: "Ne vaut pas justificatif de sortie de caisse",
     prefix: "DEP",
     numberLabel: "Demande n\xB0"
+  },
+  /**
+   * Lecture de contrôle de la journée : ni numéro, ni valeur probante. Le
+   * terminal ne la range pas, elle se régénère depuis l'écran.
+   */
+  day_report: {
+    band: "RAPPORT DE LA JOURN\xC9E",
+    sub: "Lecture de contr\xF4le, ne cl\xF4ture aucune caisse",
+    prefix: "",
+    numberLabel: ""
   }
 };
 var DUPLICATE_CHIP = "DUPLICATA";
@@ -730,6 +742,92 @@ function buildExpenseRequest(data) {
   ]);
 }
 
+// src/receipt/documents/day-report.ts
+var LIGNES_MAX_RAPPORT = 60;
+function buildDayReport(data) {
+  const money = (amount, currency) => formatMoney(amount, currency, data.currencyOverrides);
+  const principal = (amount) => money(amount, data.currency);
+  const info = compact([
+    { label: "Journ\xE9e", value: data.day, strong: true },
+    { label: "Arr\xEAt\xE9 \xE0", value: data.closedAt },
+    { label: "Port\xE9e", value: data.scope },
+    data.printedBy && { label: "Imprim\xE9 par", value: data.printedBy }
+  ]);
+  const ventes = compact([
+    { label: "Ventes", value: String(data.sales.count) },
+    { label: "Factur\xE9", value: principal(data.sales.total), strong: true },
+    data.sales.onCredit > 5e-3 && {
+      label: "dont \xE0 cr\xE9dit",
+      value: principal(data.sales.onCredit)
+    }
+  ]);
+  const caisse = [
+    {
+      label: `D\xE9penses (${data.expenses.count})`,
+      value: principal(data.expenses.total)
+    },
+    { label: "Entr\xE9es de caisse", value: principal(data.cash.cashIn) },
+    { label: "Sorties de caisse", value: principal(data.cash.cashOut) },
+    { label: "Solde net de caisse", value: principal(data.cash.net), strong: true }
+  ];
+  const lignes = data.lines ?? null;
+  const visibles = lignes ? lignes.slice(-LIGNES_MAX_RAPPORT) : [];
+  const omises = lignes ? lignes.length - visibles.length : 0;
+  return compact([
+    ...orgHeaderBlocks(data.chrome),
+    ...identityBlocks({ kind: "day_report", number: "", date: data.day }),
+    { kind: "kv", rows: info, mode: "inline", role: "body" },
+    { kind: "space", size: "xs" },
+    { kind: "rule", weight: "light" },
+    { kind: "space", size: "sm" },
+    { kind: "amounts", rows: ventes, role: "body" },
+    { kind: "space", size: "sm" },
+    { kind: "text", text: "Encaiss\xE9 par moyen", role: "label", align: "left" },
+    data.payments.length > 0 ? {
+      kind: "amounts",
+      rows: data.payments.map((p) => ({ label: p.method, value: principal(p.total) })),
+      role: "body"
+    } : { kind: "text", text: "Aucun encaissement", role: "body", align: "left" },
+    { kind: "space", size: "sm" },
+    { kind: "rule", weight: "light" },
+    { kind: "amounts", rows: caisse, role: "body" },
+    data.stock && { kind: "space", size: "sm" },
+    data.stock && { kind: "rule", weight: "light" },
+    data.stock && { kind: "text", text: "Mouvements de stock", role: "label", align: "left" },
+    data.stock && (data.stock.length > 0 ? {
+      kind: "amounts",
+      rows: data.stock.map((s) => ({ label: s.label, value: String(s.count) })),
+      role: "body"
+    } : { kind: "text", text: "Aucun mouvement", role: "body", align: "left" }),
+    lignes && { kind: "space", size: "sm" },
+    lignes && { kind: "rule", weight: "light" },
+    lignes && {
+      kind: "text",
+      text: `Ventes de la journ\xE9e (${lignes.length})`,
+      role: "label",
+      align: "left"
+    },
+    lignes && omises > 0 && {
+      kind: "text",
+      text: `${omises} vente${omises > 1 ? "s" : ""} plus ancienne${omises > 1 ? "s" : ""} : liste compl\xE8te dans le document A4.`,
+      role: "legal",
+      align: "left"
+    },
+    lignes && (visibles.length > 0 ? {
+      kind: "amounts",
+      rows: visibles.map((l) => ({
+        label: `${l.time} ${l.reference}${l.note ? ` (${l.note})` : ""}`,
+        value: money(l.amount, l.currency)
+      })),
+      role: "body"
+    } : { kind: "text", text: "Aucune vente", role: "body", align: "left" }),
+    ...footerBlocks({ org: data.chrome.org }, [
+      "Lecture de contr\xF4le de la journ\xE9e.",
+      "Ne cl\xF4ture aucune caisse."
+    ])
+  ]);
+}
+
 export {
   SUPPORTED_CURRENCIES,
   getCurrencyByCode,
@@ -757,6 +855,8 @@ export {
   buildCashSessionReceipt,
   buildExpenseReceipt,
   buildExpenseRequest,
+  LIGNES_MAX_RAPPORT,
+  buildDayReport,
   receipt_exports
 };
-//# sourceMappingURL=chunk-RYLSSDZB.js.map
+//# sourceMappingURL=chunk-BSDTYYIF.js.map

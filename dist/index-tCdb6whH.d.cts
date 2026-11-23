@@ -297,7 +297,7 @@ declare function footerBlocks(chrome: ReceiptChrome, defaultLines: string[]): Bl
  * Chaque document porte désormais le même dispositif : un bandeau en vidéo
  * inversée sous l'en-tête, et un numéro préfixé par type.
  */
-type DocumentKind = "sale" | "credit_sale" | "proforma" | "debt_payment" | "advance" | "adjustment" | "sale_return" | "cash_session" | "expense" | "expense_request";
+type DocumentKind = "sale" | "credit_sale" | "proforma" | "debt_payment" | "advance" | "adjustment" | "sale_return" | "cash_session" | "expense" | "expense_request" | "day_report";
 interface DocumentIdentity {
     /** Texte du bandeau inversé. */
     band: string;
@@ -575,6 +575,86 @@ interface ExpenseRequestData extends BaseDocumentData {
 declare function buildExpenseRequest(data: ExpenseRequestData): Block[];
 
 /**
+ * Ticket « rapport de la journée » : la lecture de contrôle d'une journée.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ CE N'EST PAS UN Z, ET LE PAPIER LE DIT.                                 │
+ * │                                                                          │
+ * │ Il ne clôture aucune caisse, ne fige aucun solde et ne porte aucun      │
+ * │ numéro : il se régénère depuis l'écran, comme la proforma, et le        │
+ * │ terminal ne le range pas parmi les documents à valeur probante. Il dit  │
+ * │ ce que la journée a produit, à l'instant où on l'imprime.               │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * ⚠ LES RELEVÉS SONT EN DEVISE PRINCIPALE, CHAQUE VENTE DANS SA DEVISE. Les
+ * relevés sont des sommes converties au taux figé de chaque vente (la même
+ * lecture que l'écran) ; une ligne de vente garde la monnaie de sa facture, et
+ * aucun total n'additionne deux monnaies.
+ *
+ * ⚠ LA LISTE EST BORNÉE. Au-delà de `LIGNES_MAX_RAPPORT` ventes, on imprime les
+ * plus récentes et on renvoie au document A4 : un rouleau de trois cents lignes
+ * n'est pas un rapport.
+ */
+
+/** Au-delà, le ticket renvoie au document A4 pour la liste complète. */
+declare const LIGNES_MAX_RAPPORT = 60;
+interface DayReportSale {
+    /** Heure locale, « 14:07 ». */
+    time: string;
+    reference: string;
+    amount: number;
+    /** La devise de SA facture. */
+    currency: string;
+    /** Mention courte accolée à la référence : « crédit », « annulée ». */
+    note?: string;
+}
+interface DayReportData {
+    kind: "day_report";
+    chrome: ReceiptChrome;
+    /** « Lundi 23 novembre 2026 ». */
+    day: string;
+    /** Heure de l'arrêté, « 14:07 ». */
+    closedAt: string;
+    /** Ce que la journée couvre : « Mes opérations », « Boutique Nord · toute l'équipe ». */
+    scope: string;
+    /** Qui imprime. */
+    printedBy?: string;
+    /** Devise des relevés : la PRINCIPALE. */
+    currency: string;
+    sales: {
+        count: number;
+        total: number;
+        onCredit: number;
+    };
+    /** Encaissé par moyen, en devise principale. */
+    payments: {
+        method: string;
+        total: number;
+    }[];
+    expenses: {
+        count: number;
+        total: number;
+    };
+    cash: {
+        cashIn: number;
+        cashOut: number;
+        net: number;
+    };
+    /** Mouvements de stock du jour par type ; absent sans droit de les lire. */
+    stock?: {
+        label: string;
+        count: number;
+    }[] | null;
+    /**
+     * Les ventes, de la plus ancienne à la plus récente. `null` : le lecteur n'a
+     * pas le droit de lire les ventes, la section n'existe pas.
+     */
+    lines?: DayReportSale[] | null;
+    currencyOverrides?: CurrencyOverrides;
+}
+declare function buildDayReport(data: DayReportData): Block[];
+
+/**
  * Fabrique de tickets, partie portable.
  *
  * Un document se DÉCRIT ici, sous forme de blocs typés ; il se REND ailleurs.
@@ -596,6 +676,8 @@ type index_CurrencyOverride = CurrencyOverride;
 type index_CurrencyOverrides = CurrencyOverrides;
 declare const index_DOCUMENT_IDENTITIES: typeof DOCUMENT_IDENTITIES;
 declare const index_DUPLICATE_CHIP: typeof DUPLICATE_CHIP;
+type index_DayReportData = DayReportData;
+type index_DayReportSale = DayReportSale;
 type index_DebtData = DebtData;
 type index_DocumentIdentity = DocumentIdentity;
 type index_DocumentKind = DocumentKind;
@@ -606,6 +688,7 @@ type index_FontRole = FontRole;
 type index_FontSpec = FontSpec;
 type index_ItemRow = ItemRow;
 type index_KvRow = KvRow;
+declare const index_LIGNES_MAX_RAPPORT: typeof LIGNES_MAX_RAPPORT;
 type index_LoadedLogo = LoadedLogo;
 type index_LoyaltyData = LoyaltyData;
 type index_OrgIdentity = OrgIdentity;
@@ -619,6 +702,7 @@ type index_SaleReceiptPayment = SaleReceiptPayment;
 type index_SpaceSize = SpaceSize;
 type index_Tokens = Tokens;
 declare const index_buildCashSessionReceipt: typeof buildCashSessionReceipt;
+declare const index_buildDayReport: typeof buildDayReport;
 declare const index_buildExpenseReceipt: typeof buildExpenseReceipt;
 declare const index_buildExpenseRequest: typeof buildExpenseRequest;
 declare const index_buildPaymentReceipt: typeof buildPaymentReceipt;
@@ -638,7 +722,7 @@ declare const index_orgHeaderBlocks: typeof orgHeaderBlocks;
 declare const index_symbolOf: typeof symbolOf;
 declare const index_tokensFor: typeof tokensFor;
 declare namespace index {
-  export { type index_AmountRow as AmountRow, type index_BaseDocumentData as BaseDocumentData, type index_Block as Block, type index_CashSessionCurrencyLine as CashSessionCurrencyLine, type index_CashSessionReceiptData as CashSessionReceiptData, type index_CurrencyOverride as CurrencyOverride, type index_CurrencyOverrides as CurrencyOverrides, index_DOCUMENT_IDENTITIES as DOCUMENT_IDENTITIES, index_DUPLICATE_CHIP as DUPLICATE_CHIP, type index_DebtData as DebtData, type index_DocumentIdentity as DocumentIdentity, type index_DocumentKind as DocumentKind, type index_ExpenseReceiptData as ExpenseReceiptData, type index_ExpenseRequestData as ExpenseRequestData, index_FONTS as FONTS, type index_FontRole as FontRole, type index_FontSpec as FontSpec, type index_ItemRow as ItemRow, type index_KvRow as KvRow, type index_LoadedLogo as LoadedLogo, type index_LoyaltyData as LoyaltyData, type index_OrgIdentity as OrgIdentity, type index_PaperWidth as PaperWidth, type index_PaymentReceiptData as PaymentReceiptData, type index_ReceiptChrome as ReceiptChrome, type index_RuleWeight as RuleWeight, type index_SaleReceiptData as SaleReceiptData, type index_SaleReceiptItem as SaleReceiptItem, type index_SaleReceiptPayment as SaleReceiptPayment, type index_SpaceSize as SpaceSize, type index_Tokens as Tokens, index_buildCashSessionReceipt as buildCashSessionReceipt, index_buildExpenseReceipt as buildExpenseReceipt, index_buildExpenseRequest as buildExpenseRequest, index_buildPaymentReceipt as buildPaymentReceipt, index_buildSaleReceipt as buildSaleReceipt, index_compact as compact, index_deaccent as deaccent, index_decimalsOf as decimalsOf, index_footerBlocks as footerBlocks, index_formatAmount as formatAmount, index_formatBare as formatBare, index_formatMoney as formatMoney, index_formatQuantity as formatQuantity, index_formatQuantityWithUnit as formatQuantityWithUnit, index_leading as leading, index_leadingOf as leadingOf, index_orgHeaderBlocks as orgHeaderBlocks, index_symbolOf as symbolOf, index_tokensFor as tokensFor };
+  export { type index_AmountRow as AmountRow, type index_BaseDocumentData as BaseDocumentData, type index_Block as Block, type index_CashSessionCurrencyLine as CashSessionCurrencyLine, type index_CashSessionReceiptData as CashSessionReceiptData, type index_CurrencyOverride as CurrencyOverride, type index_CurrencyOverrides as CurrencyOverrides, index_DOCUMENT_IDENTITIES as DOCUMENT_IDENTITIES, index_DUPLICATE_CHIP as DUPLICATE_CHIP, type index_DayReportData as DayReportData, type index_DayReportSale as DayReportSale, type index_DebtData as DebtData, type index_DocumentIdentity as DocumentIdentity, type index_DocumentKind as DocumentKind, type index_ExpenseReceiptData as ExpenseReceiptData, type index_ExpenseRequestData as ExpenseRequestData, index_FONTS as FONTS, type index_FontRole as FontRole, type index_FontSpec as FontSpec, type index_ItemRow as ItemRow, type index_KvRow as KvRow, index_LIGNES_MAX_RAPPORT as LIGNES_MAX_RAPPORT, type index_LoadedLogo as LoadedLogo, type index_LoyaltyData as LoyaltyData, type index_OrgIdentity as OrgIdentity, type index_PaperWidth as PaperWidth, type index_PaymentReceiptData as PaymentReceiptData, type index_ReceiptChrome as ReceiptChrome, type index_RuleWeight as RuleWeight, type index_SaleReceiptData as SaleReceiptData, type index_SaleReceiptItem as SaleReceiptItem, type index_SaleReceiptPayment as SaleReceiptPayment, type index_SpaceSize as SpaceSize, type index_Tokens as Tokens, index_buildCashSessionReceipt as buildCashSessionReceipt, index_buildDayReport as buildDayReport, index_buildExpenseReceipt as buildExpenseReceipt, index_buildExpenseRequest as buildExpenseRequest, index_buildPaymentReceipt as buildPaymentReceipt, index_buildSaleReceipt as buildSaleReceipt, index_compact as compact, index_deaccent as deaccent, index_decimalsOf as decimalsOf, index_footerBlocks as footerBlocks, index_formatAmount as formatAmount, index_formatBare as formatBare, index_formatMoney as formatMoney, index_formatQuantity as formatQuantity, index_formatQuantityWithUnit as formatQuantityWithUnit, index_leading as leading, index_leadingOf as leadingOf, index_orgHeaderBlocks as orgHeaderBlocks, index_symbolOf as symbolOf, index_tokensFor as tokensFor };
 }
 
-export { type AmountRow as A, type BaseDocumentData as B, type CashSessionCurrencyLine as C, DOCUMENT_IDENTITIES as D, type ExpenseReceiptData as E, FONTS as F, footerBlocks as G, formatAmount as H, type ItemRow as I, formatBare as J, type KvRow as K, type LoadedLogo as L, formatMoney as M, formatQuantity as N, type OrgIdentity as O, type PaperWidth as P, formatQuantityWithUnit as Q, type ReceiptChrome as R, type SaleReceiptData as S, type Tokens as T, leading as U, leadingOf as V, orgHeaderBlocks as W, symbolOf as X, tokensFor as Y, type Block as a, type CashSessionReceiptData as b, type CurrencyOverride as c, type CurrencyOverrides as d, DUPLICATE_CHIP as e, type DebtData as f, type DocumentIdentity as g, type DocumentKind as h, index as i, type ExpenseRequestData as j, type FontRole as k, type FontSpec as l, type LoyaltyData as m, type PaymentReceiptData as n, type RuleWeight as o, type SaleReceiptItem as p, type SaleReceiptPayment as q, type SpaceSize as r, buildCashSessionReceipt as s, buildExpenseReceipt as t, buildExpenseRequest as u, buildPaymentReceipt as v, buildSaleReceipt as w, compact as x, deaccent as y, decimalsOf as z };
+export { symbolOf as $, type AmountRow as A, type BaseDocumentData as B, type CashSessionCurrencyLine as C, DOCUMENT_IDENTITIES as D, type ExpenseReceiptData as E, FONTS as F, buildSaleReceipt as G, compact as H, type ItemRow as I, deaccent as J, type KvRow as K, LIGNES_MAX_RAPPORT as L, decimalsOf as M, footerBlocks as N, type OrgIdentity as O, type PaperWidth as P, formatAmount as Q, type ReceiptChrome as R, type SaleReceiptData as S, type Tokens as T, formatBare as U, formatMoney as V, formatQuantity as W, formatQuantityWithUnit as X, leading as Y, leadingOf as Z, orgHeaderBlocks as _, type Block as a, tokensFor as a0, type CashSessionReceiptData as b, type CurrencyOverride as c, type CurrencyOverrides as d, DUPLICATE_CHIP as e, type DayReportData as f, type DayReportSale as g, type DebtData as h, index as i, type DocumentIdentity as j, type DocumentKind as k, type ExpenseRequestData as l, type FontRole as m, type FontSpec as n, type LoadedLogo as o, type LoyaltyData as p, type PaymentReceiptData as q, type RuleWeight as r, type SaleReceiptItem as s, type SaleReceiptPayment as t, type SpaceSize as u, buildCashSessionReceipt as v, buildDayReport as w, buildExpenseReceipt as x, buildExpenseRequest as y, buildPaymentReceipt as z };

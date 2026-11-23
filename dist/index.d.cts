@@ -1,5 +1,5 @@
-export { C as ChannelAvailability, a as CurrencyFallback, b as CurrencyInfo, c as CurrencyTable, M as MAX_QUANTITY, d as MIN_QUANTITY, e as MONEY_EPS, f as MoneyHelpers, O as OrganizationCurrency, g as OrganizationCurrencyLike, P as PackagedProductLike, h as Packaging, Q as QUANTITY_DECIMALS, i as QUANTITY_INTEGER_DIGITS, S as StockCounters, j as availableBase, k as availableSplit, l as createCurrencyTable, m as createMoneyHelpers, n as formatPackaged, o as formatPackagedDifference, p as formatPackagedSplit, q as formatQuantity, r as formatUnitQuantity, s as getPackaging, t as pos, u as r2, v as remainingChannels, w as roundQuantity, x as splitPackaged, y as toBaseQuantity } from './index-_SALTH1s.cjs';
-export { i as receipt } from './index-CqxWh3Hk.cjs';
+export { C as ChannelAvailability, a as CurrencyFallback, b as CurrencyInfo, c as CurrencyTable, M as MAX_QUANTITY, d as MIN_QUANTITY, e as MONEY_EPS, f as MoneyHelpers, O as OrganizationCurrency, g as OrganizationCurrencyLike, P as PackagedProductLike, h as Packaging, Q as QUANTITY_DECIMALS, i as QUANTITY_INTEGER_DIGITS, S as StockCounters, j as availableBase, k as availableSplit, l as createCurrencyTable, m as createMoneyHelpers, n as formatPackaged, o as formatPackagedDifference, p as formatPackagedSplit, q as formatQuantity, r as formatUnitQuantity, s as getPackaging, t as pos, u as r2, v as remainingChannels, w as roundQuantity, x as splitPackaged, y as toBaseQuantity } from './index-DpNPyo57.cjs';
+export { i as receipt } from './index-tCdb6whH.cjs';
 
 /**
  * Formatage français, sans `Intl`.
@@ -553,4 +553,238 @@ declare function daysLate(dueDate?: string | null): number;
 /** Libellé court : « En retard de 5 j », « Échoit dans 3 j », « Échoit aujourd'hui ». */
 declare function dueDateLabel(dueDate?: string | null): string | null;
 
-export { CHOIX_TOUS, type CountryOption, type CurrencyOption, DEFAULT_COUNTRY, type DefautPerimetre, type EntrepotDuMembre, LIBELLES_CASES_PERIMETRE, LIBELLES_VERROU_PERIMETRE, LIBELLE_TOUS_ENTREPOTS, LIBELLE_TOUS_UTILISATEURS, type ManageableRole, type Margin, type MembrePerimetre, type MotifVerrouPerimetre, NNBSP, type NaturePerimetre, PERMISSION_VOIR_TOUT, ROLE_HIERARCHY, ROLE_LABELS, type Role, SUPPORTED_COUNTRIES, SUPPORTED_CURRENCIES, type UserPermissions, afficheFiltreEntrepot, afficheFiltreUtilisateur, afficheFiltresPerimetre, blendedUnitCost, canManageRole, caseConsulterTousUtile, caseVoirToutUtile, choixEntrepotRecevable, computeMargin, daysLate, defaultCountryForCurrency, defautDuPerimetre, dueDateLabel, entrepotsActionnables, entrepotsLisibles, estBorneParAuteur, formatDate, formatDateFr, formatDateTime, formatDateTimeFr, formatDecimal, formatFixedFr, formatNumber, formatNumberFr, formatPercent, formatPrice, formatPriceValue, formatTimeFr, getCountryByValue, getCurrencyByCode, getCurrencyName, getCurrencySymbol, getDefaultCurrency, hasAllPermissions, hasAnyPermission, hasPermission, isAtLeastRole, isOverdue, isRole, libelleDefautEntrepot, libelleDefautUtilisateur, litTousLesEntrepots, membreDepuisPermissions, monthLong, monthShort, packageEquivalent, parametresDuChoix, pluralizeUnit, proposeTousLesEntrepots, proposeTousLesUtilisateurs, retailEquivalent, setDefaultCurrency, verrouEntrepot, verrouUtilisateur, weekdayLong };
+/**
+ * La casse d'un nom d'article, telle que la carte du comptoir l'affiche.
+ *
+ * Les marchands saisissent souvent leur catalogue en capitales
+ * (« ALDACTONE 25MG 5CES ») : sur une grille de trente cartes, un mur de
+ * majuscules se lit mal et chaque nom pèse autant que son voisin. La carte
+ * écrit donc « Aldactone 25mg 5ces ».
+ *
+ * ⚠ C'EST UN AFFICHAGE. La base locale, la recherche, le ticket et le serveur
+ * gardent le nom tel que le marchand l'a saisi : on ne réécrit pas une donnée
+ * pour la montrer autrement.
+ *
+ * ⚠ `toLowerCase` ET JAMAIS `toLocaleLowerCase`. La seconde suit la langue du
+ * système (« I » devient « ı » en turc), et le moteur Hermes n'embarque pas les
+ * données complètes de langue : c'est le piège déjà proscrit pour `Intl`.
+ */
+declare function casseDeTitre(nom: string): string;
+
+/**
+ * Lire un nombre TAPÉ À LA MAIN, sur un pavé décimal de terminal.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ TROIS ÉCRANS LISAIENT UNE SAISIE, DE TROIS FAÇONS DIFFÉRENTES.          │
+ * │                                                                          │
+ * │ L'ouverture de caisse envoyait la chaîne telle quelle, et le serveur     │
+ * │ refusait la virgule ; la clôture faisait `replace(",", ".")` ; le devis  │
+ * │ faisait de même mais tombait sur les ESPACES, un « 12 500 » donnant      │
+ * │ `NaN`, ramené à zéro, puis silencieusement refusé par un bouton qui ne   │
+ * │ réagissait pas. Trois lectures pour un seul geste : taper un nombre.     │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * **Le MOTIF est rendu, pas la phrase.** Un fonds de caisse négatif et une
+ * quantité négative ne se disent pas de la même façon, et la phrase qu'un
+ * marchand lit appartient à l'écran qui la lui montre. Ce module tranche la
+ * seule chose qui ne dépend pas du contexte : ce que la chaîne VAUT.
+ *
+ * Module PUR : il décide de ce qui part au serveur, il doit s'éprouver sans
+ * appareil.
+ */
+type MotifRefus = "negatif" | "illisible";
+type LectureNombre = 
+/** `valeur` à `null` : la saisie est VIDE. À l'appelant de dire ce que ça veut dire. */
+{
+    ok: true;
+    valeur: number | null;
+} | {
+    ok: false;
+    motif: MotifRefus;
+};
+declare function lireNombre(saisie: string): LectureNombre;
+/**
+ * Ce qu'un changement de devise fait au montant déjà tapé.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ ON CONVERTIT, ON N'EFFACE JAMAIS.                                       │
+ * │                                                                          │
+ * │ C'est la règle de `CurrencyAmountInput.selectCurrency` du back-office,   │
+ * │ et son commentaire la dit mieux que nous : « changer de devise ne doit   │
+ * │ pas changer la valeur voulue par le marchand ». Un caissier qui tape     │
+ * │ 46 000 en francs puis bascule en dollars veut toujours la même somme,    │
+ * │ pas un champ vide ni quarante-six mille dollars.                         │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ ON LIT PAR `lireNombre`, ET SURTOUT PAS PAR `parseFloat`.               │
+ * │                                                                          │
+ * │ Le web fait `parseFloat`, et c'est inoffensif chez lui : son champ est   │
+ * │ un `<input type="number">` où l'espace ne se tape pas. Au pouce, sur un  │
+ * │ pavé décimal, « 12 500 » s'écrit tous les jours - et `parseFloat` en     │
+ * │ tire DOUZE. Le montant serait converti à partir d'une valeur fausse,     │
+ * │ sans que rien ne le signale.                                             │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * Module PUR : il décide de ce qui part au serveur, il doit s'éprouver sans
+ * appareil. Aucune arithmétique n'y est écrite - `convMoney` vient du noyau,
+ * qui est la seule vérité sur les taux (§5.1).
+ */
+/** Ce que le noyau fournit, réduit à ce dont ce module a besoin. */
+interface Conversion {
+    /** `money.convMoney` : convertit par la devise principale, puis arrondit. */
+    convertir: (montant: number, de: string, vers: string) => number;
+    /** Décimales de la devise, pour ne pas rendre « 46000.000000001 ». */
+    decimales: (code: string) => number;
+}
+/**
+ * Le montant tapé, ré-exprimé dans la devise choisie.
+ *
+ * Rend TOUJOURS une chaîne : les décimales voyagent en texte, jamais en
+ * nombre (§5.3 règle 3). Une saisie vide, illisible ou nulle est rendue
+ * VERBATIM - c'est ce que fait le web, et c'est ce qui permet de basculer de
+ * devise avant d'avoir tapé quoi que ce soit.
+ */
+declare function convertirSaisie(saisie: string, de: string, vers: string, conv: Conversion): string;
+/**
+ * Faut-il montrer le repère « = 46 000 FC · 1 USD = 2 300 FC » ?
+ *
+ * Les trois conditions du web (`showConversion`), dans le même ordre :
+ * l'établissement est multi-devise, la devise choisie n'est pas la principale,
+ * et le montant lu est strictement positif. Un repère affiché sur un champ
+ * vide ne renseigne personne et occupe une ligne.
+ */
+declare function montrerConversion(saisie: string, devise: string, principale: string, nombreDeDevises: number): boolean;
+
+/**
+ * La portée de « Ma journée » : QUI et OÙ l'écran regarde aujourd'hui.
+ *
+ * ┌──────────────────────────────────────────────────────────────────────────┐
+ * │ PAR DÉFAUT, CHACUN VOIT SA PROPRE JOURNÉE, PROPRIÉTAIRE COMPRIS.        │
+ * │                                                                          │
+ * │ C'est ce qui distingue cet écran des listes (`perimetre.ts`), où le      │
+ * │ gérant voit d'emblée tout son entrepôt. Ici la question est « qu'ai-je   │
+ * │ fait aujourd'hui ? », et les filtres ÉLARGISSENT :                       │
+ * │                                                                          │
+ * │   rien choisi            -> moi                                          │
+ * │   un entrepôt            -> TOUTE la journée de cet entrepôt             │
+ * │   « Tous les entrepôts » -> tout ce que je peux lire                     │
+ * │   une personne           -> sa journée (dans l'entrepôt choisi, s'il y   │
+ * │                             en a un)                                     │
+ * │   « Toute l'équipe »     -> toute l'équipe de mes entrepôts              │
+ * │                                                                          │
+ * │ Choisir un entrepôt, c'est regarder sa journée entière : c'est ce qui    │
+ * │ donne au gérant « filtrer sur son entrepôt pour voir tout l'entrepôt »,  │
+ * │ en un seul geste.                                                        │
+ * └──────────────────────────────────────────────────────────────────────────┘
+ *
+ * ⚠ LE CAISSIER N'A AUCUN FILTRE, QUELLES QUE SOIENT SES CASES (décision du
+ * 2026-11-22). Ma journée reste strictement personnelle pour lui ; ses cases
+ * continuent de s'appliquer aux autres écrans. Le serveur le tient aussi : il
+ * refuse à un caissier tout paramètre qui n'est pas lui-même.
+ *
+ * ⚠ CE MODULE NE VÉRIFIE PAS QUI EST UN COLLÈGUE. La liste des personnes vient
+ * de l'équipe que le serveur a déjà bornée ; un identifiant hors périmètre est
+ * refusé par le serveur (400), jamais rendu en ensemble vide.
+ */
+
+/** Ce que le membre a choisi : `null` (rien), un identifiant, ou `CHOIX_TOUS`. */
+interface ChoixJournee {
+    entrepot: string | null;
+    utilisateur: string | null;
+}
+declare const CHOIX_JOURNEE_VIDE: ChoixJournee;
+/** Ce que l'écran propose au membre. */
+interface ChampsJournee {
+    /** Le champ « Entrepôt ». */
+    entrepot: boolean;
+    /** Le champ « Utilisateur ». */
+    utilisateur: boolean;
+    /** Le choix « Tous les entrepôts » : propriétaire, case « Consulter tous ». */
+    tousLesEntrepots: boolean;
+}
+/**
+ * Les champs de Ma journée pour ce membre.
+ *
+ * ⚠ Le gérant et le magasinier ont le champ « Entrepôt » MÊME AVEC UN SEUL
+ * entrepôt : sans lui, ils n'auraient aucun moyen de voir leur entrepôt entier
+ * (ailleurs, choisir entre une seule chose n'est pas un choix ; ici, c'est le
+ * choix entre « moi » et « tout l'entrepôt »). Un membre sans entrepôt n'a rien
+ * à élargir.
+ */
+declare function champsDeLaJournee(m: MembrePerimetre): ChampsJournee;
+/** Le membre a-t-il le moindre filtre sur Ma journée ? */
+declare function afficheFiltresDeLaJournee(m: MembrePerimetre): boolean;
+/**
+ * La portée APPLIQUÉE.
+ *
+ * - `moi` : mes opérations, dans tout ce que je peux lire ;
+ * - `equipe` : tous les auteurs ; `entrepot` est un identifiant, `CHOIX_TOUS`
+ *   (tous les entrepôts lisibles) ou `null` (mes entrepôts) ;
+ * - `membre` : une personne, éventuellement dans un entrepôt.
+ */
+type PorteeJournee = {
+    kind: "moi";
+} | {
+    kind: "equipe";
+    entrepot: string | null;
+} | {
+    kind: "membre";
+    utilisateur: string;
+    entrepot: string | null;
+};
+declare const PORTEE_MOI: PorteeJournee;
+/**
+ * Le choix traduit en portée, après en avoir écarté ce qui n'est pas recevable.
+ *
+ * ⚠ UN CHOIX HORS PÉRIMÈTRE EST ÉCARTÉ, PAS ENVOYÉ : un entrepôt qui n'est pas
+ * le sien (un filtre resté d'une session précédente, un rôle changé entre-temps)
+ * retombe sur rien. Le caissier ne quitte jamais `moi`.
+ */
+declare function porteeDeLaJournee(m: MembrePerimetre, choix: ChoixJournee): PorteeJournee;
+/**
+ * Les paramètres de requête de la portée.
+ *
+ * Ils servent DEUX endpoints, et c'est voulu : la journée (`my-day`), et la
+ * liste des ventes du jour (`/sales/`). `moi` part donc en `user=<moi>`, que les
+ * deux comprennent ; `my-day` sans paramètre rend la même chose.
+ */
+declare function parametresDeLaJournee(p: PorteeJournee, moi: string): {
+    warehouse?: string;
+    all_warehouses?: "1";
+    user?: string;
+    all_users?: "1";
+};
+/** Ce qu'on lit sur le champ Entrepôt vide. */
+declare function libelleEntrepotVide(m: MembrePerimetre): string;
+/**
+ * Ce qu'on lit sur le champ Utilisateur vide.
+ *
+ * ⚠ IL DÉPEND DE L'ENTREPÔT : sans entrepôt, le vide veut dire « moi » ; avec
+ * un entrepôt choisi, il veut dire toute l'équipe de cet entrepôt. Le champ vide
+ * NOMME toujours ce qu'il applique.
+ */
+declare function libelleUtilisateurVide(choix: ChoixJournee): string;
+declare const LIBELLE_TOUTE_L_EQUIPE = "Toute l'\u00E9quipe";
+/**
+ * Faut-il proposer « Toute l'équipe » comme choix du champ Utilisateur ?
+ * Seulement sans entrepôt : avec un entrepôt choisi, le vide le dit déjà.
+ */
+declare function proposeTouteLEquipe(choix: ChoixJournee): boolean;
+/**
+ * Faut-il se proposer soi-même parmi les personnes ? Seulement quand un
+ * entrepôt est choisi (« moi, dans cet entrepôt ») : sans entrepôt, le champ
+ * vide est déjà « moi ».
+ */
+declare function proposeSoiMeme(choix: ChoixJournee): boolean;
+/**
+ * Le libellé de la portée, pour le sous-titre de l'écran et l'en-tête du
+ * rapport : « Mes opérations », « Boutique Nord · toute l'équipe », « Jean K. ».
+ */
+declare function libelleDeLaPortee(p: PorteeJournee, noms: {
+    role: MembrePerimetre["role"];
+    entrepot: (id: string) => string | undefined;
+    utilisateur: (id: string) => string | undefined;
+}): string;
+
+export { CHOIX_JOURNEE_VIDE, CHOIX_TOUS, type ChampsJournee, type ChoixJournee, type Conversion, type CountryOption, type CurrencyOption, DEFAULT_COUNTRY, type DefautPerimetre, type EntrepotDuMembre, LIBELLES_CASES_PERIMETRE, LIBELLES_VERROU_PERIMETRE, LIBELLE_TOUS_ENTREPOTS, LIBELLE_TOUS_UTILISATEURS, LIBELLE_TOUTE_L_EQUIPE, type LectureNombre, type ManageableRole, type Margin, type MembrePerimetre, type MotifRefus, type MotifVerrouPerimetre, NNBSP, type NaturePerimetre, PERMISSION_VOIR_TOUT, PORTEE_MOI, type PorteeJournee, ROLE_HIERARCHY, ROLE_LABELS, type Role, SUPPORTED_COUNTRIES, SUPPORTED_CURRENCIES, type UserPermissions, afficheFiltreEntrepot, afficheFiltreUtilisateur, afficheFiltresDeLaJournee, afficheFiltresPerimetre, blendedUnitCost, canManageRole, caseConsulterTousUtile, caseVoirToutUtile, casseDeTitre, champsDeLaJournee, choixEntrepotRecevable, computeMargin, convertirSaisie, daysLate, defaultCountryForCurrency, defautDuPerimetre, dueDateLabel, entrepotsActionnables, entrepotsLisibles, estBorneParAuteur, formatDate, formatDateFr, formatDateTime, formatDateTimeFr, formatDecimal, formatFixedFr, formatNumber, formatNumberFr, formatPercent, formatPrice, formatPriceValue, formatTimeFr, getCountryByValue, getCurrencyByCode, getCurrencyName, getCurrencySymbol, getDefaultCurrency, hasAllPermissions, hasAnyPermission, hasPermission, isAtLeastRole, isOverdue, isRole, libelleDeLaPortee, libelleDefautEntrepot, libelleDefautUtilisateur, libelleEntrepotVide, libelleUtilisateurVide, lireNombre, litTousLesEntrepots, membreDepuisPermissions, monthLong, monthShort, montrerConversion, packageEquivalent, parametresDeLaJournee, parametresDuChoix, pluralizeUnit, porteeDeLaJournee, proposeSoiMeme, proposeTousLesEntrepots, proposeTousLesUtilisateurs, proposeTouteLEquipe, retailEquivalent, setDefaultCurrency, verrouEntrepot, verrouUtilisateur, weekdayLong };
