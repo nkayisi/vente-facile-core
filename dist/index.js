@@ -360,9 +360,8 @@ var CHOIX_JOURNEE_VIDE = { entrepot: null, utilisateur: null };
 var AUCUN_CHAMP = { entrepot: false, utilisateur: false, tousLesEntrepots: false };
 function champsDeLaJournee(m) {
   if (m.role === null || m.role === "cashier") return AUCUN_CHAMP;
-  const tous = litTousLesEntrepots(m);
-  if (!tous && m.affectes.length === 0) return AUCUN_CHAMP;
-  return { entrepot: true, utilisateur: true, tousLesEntrepots: tous };
+  if (!litTousLesEntrepots(m) && m.affectes.length === 0) return AUCUN_CHAMP;
+  return { entrepot: true, utilisateur: true, tousLesEntrepots: proposeTousLesEntrepots(m) };
 }
 function afficheFiltresDeLaJournee(m) {
   const c = champsDeLaJournee(m);
@@ -373,7 +372,8 @@ function porteeDeLaJournee(m, choix) {
   const champs = champsDeLaJournee(m);
   if (!champs.entrepot && !champs.utilisateur) return PORTEE_MOI;
   const permis = new Set(m.affectes.map((e) => e.id));
-  const entrepot = champs.entrepot ? choixEntrepotRecevable(choix.entrepot, permis, champs.tousLesEntrepots) : null;
+  const recevable = champs.entrepot ? choixEntrepotRecevable(choix.entrepot, permis, litTousLesEntrepots(m)) : null;
+  const entrepot = recevable === CHOIX_TOUS && !champs.tousLesEntrepots ? null : recevable;
   const utilisateur = champs.utilisateur ? choix.utilisateur : null;
   if (utilisateur && utilisateur !== CHOIX_TOUS) {
     return { kind: "membre", utilisateur, entrepot };

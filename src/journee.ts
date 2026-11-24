@@ -34,6 +34,7 @@ import {
   choixEntrepotRecevable,
   libelleDefautEntrepot,
   litTousLesEntrepots,
+  proposeTousLesEntrepots,
   type MembrePerimetre,
 } from "./perimetre";
 
@@ -51,7 +52,16 @@ export interface ChampsJournee {
   entrepot: boolean;
   /** Le champ « Utilisateur ». */
   utilisateur: boolean;
-  /** Le choix « Tous les entrepôts » : propriétaire, case « Consulter tous ». */
+  /**
+   * Le choix « Tous les entrepôts » : la case « Consulter tous », et elle seule.
+   *
+   * ⚠ PAS LE PROPRIÉTAIRE. Son champ vide se lit déjà « Tous les entrepôts »
+   * (il lit tout par défaut), et la liste affichait alors DEUX entrées du même
+   * nom pour deux portées différentes - vu sur le terminal. Tout l'établissement
+   * lui reste à un geste : « Toute l'équipe ». C'est la règle des listes
+   * (`proposeTousLesEntrepots`), qui ne propose pas non plus ce choix au
+   * propriétaire.
+   */
   tousLesEntrepots: boolean;
 }
 
@@ -68,9 +78,8 @@ const AUCUN_CHAMP: ChampsJournee = { entrepot: false, utilisateur: false, tousLe
  */
 export function champsDeLaJournee(m: MembrePerimetre): ChampsJournee {
   if (m.role === null || m.role === "cashier") return AUCUN_CHAMP;
-  const tous = litTousLesEntrepots(m);
-  if (!tous && m.affectes.length === 0) return AUCUN_CHAMP;
-  return { entrepot: true, utilisateur: true, tousLesEntrepots: tous };
+  if (!litTousLesEntrepots(m) && m.affectes.length === 0) return AUCUN_CHAMP;
+  return { entrepot: true, utilisateur: true, tousLesEntrepots: proposeTousLesEntrepots(m) };
 }
 
 /** Le membre a-t-il le moindre filtre sur Ma journée ? */
@@ -106,9 +115,12 @@ export function porteeDeLaJournee(m: MembrePerimetre, choix: ChoixJournee): Port
   if (!champs.entrepot && !champs.utilisateur) return PORTEE_MOI;
 
   const permis = new Set(m.affectes.map((e) => e.id));
-  const entrepot = champs.entrepot
-    ? choixEntrepotRecevable(choix.entrepot, permis, champs.tousLesEntrepots)
+  // Un entrepôt PRÉCIS est recevable pour qui lit partout ; « Tous » seulement
+  // là où il est proposé.
+  const recevable = champs.entrepot
+    ? choixEntrepotRecevable(choix.entrepot, permis, litTousLesEntrepots(m))
     : null;
+  const entrepot = recevable === CHOIX_TOUS && !champs.tousLesEntrepots ? null : recevable;
   const utilisateur = champs.utilisateur ? choix.utilisateur : null;
 
   if (utilisateur && utilisateur !== CHOIX_TOUS) {

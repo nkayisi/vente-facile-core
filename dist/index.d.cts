@@ -700,7 +700,16 @@ interface ChampsJournee {
     entrepot: boolean;
     /** Le champ « Utilisateur ». */
     utilisateur: boolean;
-    /** Le choix « Tous les entrepôts » : propriétaire, case « Consulter tous ». */
+    /**
+     * Le choix « Tous les entrepôts » : la case « Consulter tous », et elle seule.
+     *
+     * ⚠ PAS LE PROPRIÉTAIRE. Son champ vide se lit déjà « Tous les entrepôts »
+     * (il lit tout par défaut), et la liste affichait alors DEUX entrées du même
+     * nom pour deux portées différentes - vu sur le terminal. Tout l'établissement
+     * lui reste à un geste : « Toute l'équipe ». C'est la règle des listes
+     * (`proposeTousLesEntrepots`), qui ne propose pas non plus ce choix au
+     * propriétaire.
+     */
     tousLesEntrepots: boolean;
 }
 /**

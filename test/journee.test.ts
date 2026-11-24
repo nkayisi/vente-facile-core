@@ -55,8 +55,9 @@ describe("les champs de Ma journée", () => {
     expect(champsDeLaJournee(membre({ role: "stock_keeper" })).entrepot).toBe(true);
   });
 
-  it("« Tous les entrepôts » au propriétaire et à la case « Consulter tous »", () => {
-    expect(champsDeLaJournee(membre({ role: "owner", affectes: [] })).tousLesEntrepots).toBe(true);
+  it("« Tous les entrepôts » à la case « Consulter tous », pas au propriétaire", () => {
+    // Son champ vide le dit déjà : deux entrées du même nom dans une liste.
+    expect(champsDeLaJournee(membre({ role: "owner", affectes: [] })).tousLesEntrepots).toBe(false);
     expect(champsDeLaJournee(membre({ consulteTout: true })).tousLesEntrepots).toBe(true);
     expect(champsDeLaJournee(membre()).tousLesEntrepots).toBe(false);
   });
@@ -122,11 +123,22 @@ describe("la portée appliquée", () => {
       kind: "moi",
     });
     expect(
-      porteeDeLaJournee(membre({ role: "owner", affectes: [] }), {
+      porteeDeLaJournee(membre({ consulteTout: true }), {
         entrepot: CHOIX_TOUS,
         utilisateur: null,
       }),
     ).toEqual({ kind: "equipe", entrepot: CHOIX_TOUS });
+  });
+
+  it("le propriétaire atteint tout l'établissement par « Toute l'équipe »", () => {
+    const owner = membre({ role: "owner", affectes: [] });
+    expect(porteeDeLaJournee(owner, { entrepot: CHOIX_TOUS, utilisateur: null })).toEqual({
+      kind: "moi",
+    });
+    expect(porteeDeLaJournee(owner, { entrepot: null, utilisateur: CHOIX_TOUS })).toEqual({
+      kind: "equipe",
+      entrepot: null,
+    });
   });
 
   it("le propriétaire vise n'importe quel entrepôt", () => {
